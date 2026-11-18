@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>V2-03 · Cube de noyaux — PLE Ledger Kernels Writeup</title>
+<style>
+  :root{
+    --night:#07090b; --night-2:#0f1316; --line-n:#20272d; --text-n:#eef2f4; --dim-n:#8a959f;
+    --paper:#ffffff; --bg-2:#f5f7f8; --ink:#101418; --grey:#5b6672; --rule:#e3e7ea;
+    --teal:#0f766e; --glow:#3ad1b9; --red:#b91c1c;
+    --serif: Charter, "Bitstream Charter", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink)}
+  body{font:18px/1.62 var(--serif)}
+  .wrap{width:1440px;margin:0 auto}
+
+  /* ---------- the lit scene ---------- */
+  .scene{position:relative;height:800px;background:var(--night);color:var(--text-n);overflow:hidden}
+  .bar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:28px;height:64px;padding:0 64px;font:13px var(--sans);color:var(--dim-n);z-index:3}
+  .bar b{color:var(--text-n)} .bar .sp{flex:1}
+  .demo{font:11px var(--mono);border:1px dashed var(--dim-n);border-radius:4px;padding:5px 8px}
+
+  /* light beam (Noddal) */
+  .beam{position:absolute;left:948px;top:0;width:2px;height:800px;background:var(--glow);box-shadow:0 0 18px 4px rgba(58,209,185,.55),0 0 80px 18px rgba(58,209,185,.18);opacity:.9}
+
+  /* CSS-only 3D cube made of kernel tiles */
+  .stage{position:absolute;left:800px;top:170px;width:300px;height:300px;perspective:1300px}
+  .cube{position:relative;width:300px;height:300px;transform-style:preserve-3d;transform:rotateX(-24deg) rotateY(-38deg)}
+  .face{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;padding:6px;
+        background:rgba(15,19,22,.92);border:1px solid #2c363d}
+  .face span{border:1px solid #2d3a40;background:#121a1e;font:500 10.5px/1.2 var(--mono);color:#9fb0b8;display:flex;align-items:flex-end;padding:7px}
+  .face span.on{background:#0f3a35;border-color:var(--glow);color:#d9fff8;box-shadow:inset 0 0 22px rgba(58,209,185,.35)}
+  .f1{transform:translateZ(150px)} .f2{transform:rotateY(90deg) translateZ(150px)} .f3{transform:rotateX(90deg) translateZ(150px)}
+  .f4{transform:rotateY(180deg) translateZ(150px)} .f5{transform:rotateY(-90deg) translateZ(150px)} .f6{transform:rotateX(-90deg) translateZ(150px)}
+  .floorglow{position:absolute;left:740px;top:540px;width:420px;height:90px;border-radius:50%;background:radial-gradient(closest-side,rgba(58,209,185,.22),transparent);filter:blur(4px)}
+
+  .copy{position:absolute;left:64px;top:140px;width:660px;z-index:2}
+  .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--glow)}
+  h1{font:300 76px/1 var(--sans);letter-spacing:-.04em;margin:22px 0 0}
+  h1 b{font-weight:600}
+  .dek{font:19px/1.55 var(--serif);color:#c3ccd2;margin:28px 0 0;max-width:560px}
+
+  /* horizon (Teko) + proof next to the claim */
+  .horizon{position:absolute;left:-10%;right:-10%;bottom:-650px;height:760px;border-radius:50%;border-top:1.5px solid var(--glow);box-shadow:0 -30px 90px -30px rgba(58,209,185,.35);background:var(--paper)}
+  .proof{position:absolute;left:64px;right:64px;bottom:160px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;z-index:2}
+  .proof div{border-left:1px solid var(--line-n);padding:0 22px;font:11px/1.4 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim-n)}
+  .proof div:first-child{border-left:0;padding-left:0}
+  .proof b{display:block;font:500 40px/1.1 var(--mono);letter-spacing:-.03em;color:var(--text-n);text-transform:none;margin-top:6px}
+  .proof b.t{color:var(--glow)}
+  .proof small{display:block;text-transform:none;letter-spacing:0;font-size:12px}
+  .proof small.r{color:#f07070}
+  .cubecap{position:absolute;left:1160px;top:250px;font:11.5px/1.5 var(--mono);color:var(--dim-n);width:220px;z-index:2}
+
+  /* ---------- reading body on white ---------- */
+  .finding{position:relative;z-index:3;margin:-90px auto 0;width:980px;background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:30px 36px;box-shadow:0 24px 60px rgba(16,20,24,.10)}
+  .finding .k{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--teal)}
+  .finding p{font:500 26px/1.38 var(--sans);letter-spacing:-.015em;margin:12px 0 0}
+  .num{font-family:var(--mono);font-weight:600;color:var(--teal);white-space:nowrap}.num.bad{color:var(--red)}
+
+  .body{display:grid;grid-template-columns:240px 700px 1fr;gap:0 64px;padding:0 64px}
+  .side{font:12.5px/1.6 var(--mono);color:var(--grey);padding-top:104px}
+  section{padding-top:96px}
+  h2{font:300 40px/1.1 var(--sans);letter-spacing:-.03em;margin:0 0 20px}
+  h2 b{font-weight:600}
+  h2 small{display:block;font:500 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:14px}
+  p{margin:0 0 18px}
+  code{font:15px var(--mono);background:var(--bg-2);border:1px solid var(--rule);padding:1px 6px;border-radius:4px}
+
+  /* figures as lit windows (Giallo) */
+  .win{margin:32px 64px 0;background:var(--night);border-radius:14px;padding:22px;color:var(--text-n)}
+  .win .wh{display:flex;justify-content:space-between;font:12px var(--mono);color:var(--dim-n);padding:0 4px 14px}
+  .win .wh b{color:var(--text-n);font:600 13px var(--sans)}
+  .win .screen{background:var(--paper);color:var(--ink);border-radius:8px;padding:26px 28px 18px;box-shadow:0 0 0 1px #1d2429,0 0 60px rgba(58,209,185,.10)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  figcaption{font:14px/1.55 var(--sans);color:var(--grey);margin-top:12px}
+  figcaption b{color:var(--ink)}
+  .tick{font:12px var(--mono);fill:#5b6672}.lab{font:600 13px var(--sans);fill:#101418}
+
+  .ledger,.cmp{width:100%;border-collapse:collapse;font:14px/1.45 var(--mono)}
+  .ledger th,.cmp th{font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--grey);text-align:left;padding:10px;border-bottom:1px solid var(--ink)}
+  .ledger td,.cmp td{padding:11px 10px;border-bottom:1px solid var(--rule)}
+  .ledger td.v{color:var(--teal);font-weight:600}
+  .ledger tr.err td{color:var(--red)} .ledger tr.err td.v{text-decoration:line-through}
+  .unk{border:1px dashed var(--grey);border-radius:4px;padding:1px 6px;color:var(--grey);font-size:12px}
+  .cmp td:not(:first-child),.cmp th:not(:first-child){text-align:right} .cmp td.t{color:var(--teal);font-weight:600}
+  ul{padding-left:20px} li{margin-bottom:10px}
+  .foot{display:flex;justify-content:space-between;margin:110px 64px 0;padding:22px 0 40px;border-top:1px solid var(--rule);font:12.5px var(--mono);color:var(--grey)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .cube{animation:spin 40s linear infinite}
+    @keyframes spin{from{transform:rotateX(-24deg) rotateY(-38deg)}to{transform:rotateX(-24deg) rotateY(322deg)}}
+    .beam{animation:pulse 4s ease-in-out infinite}
+    @keyframes pulse{50%{opacity:.6}}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{font-size:10.5pt}.wrap{width:auto}
+    .scene{height:auto;background:#fff;color:#101418;padding:0 0 6mm}
+    .bar,.copy,.proof{position:static;padding:0}.beam,.stage,.floorglow,.horizon,.cubecap{display:none}
+    h1{font-size:36pt}.dek{color:#101418}.proof{display:grid;margin-top:6mm}.proof b{color:#101418}.proof b.t{color:#0f766e}
+    .finding{margin:4mm 0;width:auto;box-shadow:none}
+    .body{grid-template-columns:1fr;padding:0}.side{display:none}section{padding-top:8mm}
+    .win{margin:6mm 0;padding:0;background:none;break-inside:avoid}.win .wh{color:#5b6672}.win .screen{box-shadow:none;border:1px solid #ccc}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="scene">
+    <div class="bar"><b>ple-ledger-kernels</b><span>Kaggle Writeup · Stage 1</span><span class="sp"></span><span>commit <b style="font:400 12px var(--mono)">········</b> (SHA 40 car. au commit final)</span><span class="demo">chiffres de démo · eval/run.py</span></div>
+
+    <div class="beam"></div>
+    <div class="floorglow"></div>
+    <div class="stage" aria-label="A cube of deterministic kernels; lit tiles are the ones used on the dev set">
+      <div class="cube">
+        <div class="face f1"><span class="on">beam-simple</span><span>frame-2d</span><span>truss</span><span>section-props</span><span class="on">mna-ac</span><span>buckling</span><span class="on">three-phase</span><span>cable-size</span><span>thermo</span></div>
+        <div class="face f2"><span>fluid-net</span><span class="on">AUDIT</span><span>pint</span><span>scipy</span><span>sympy</span><span class="on">LEDGER</span><span>units</span><span>ranges</span><span>DONE</span></div>
+        <div class="face f3"><span>F-03</span><span>F-07</span><span class="on">K-1</span><span>K-2</span><span>F-11</span><span>F-12</span><span>K-3</span><span>F-14</span><span>K-4</span></div>
+        <div class="face f4"><span>EXTRACT</span><span>SPEC</span><span>SOLVE</span><span class="on">AUDIT</span><span>PROVE</span><span>WRITE</span><span>ezdxf</span><span>trimesh</span><span>OCR</span></div>
+        <div class="face f5"><span>Ω</span><span>kN·m</span><span class="on">mm</span><span>kW</span><span>Pa</span><span>m³/s</span><span>A</span><span>V</span><span>K</span></div>
+        <div class="face f6"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </div>
+    <div class="cubecap">the kernel pack · deterministic, CPU-only<br>lit tiles = used on the shown task</div>
+
+    <div class="copy">
+      <div class="eyebrow">Agent Harness · 29 dev tasks</div>
+      <h1>The model never <b>reads the drawing.</b></h1>
+      <p class="dek">The LLM only writes a typed spec. Facts are extracted with provenance, kernels compute with unit checks, and the deliverable can only cite the ledger.</p>
+    </div>
+
+    <div class="horizon"></div>
+    <div class="proof">
+      <div>dev-set score<b class="t">0.31</b><small class="r">LLM alone 0.11</small></div>
+      <div>tokens / task<b>24 k</b><small>LLM alone 62 k</small></div>
+      <div>failures<b>25 → 7</b><small>on 29 tasks</small></div>
+      <div>models<b>2</b><small>opus-5-5 · gemma-4-26b local</small></div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="k">Main finding</div>
+    <p>Taking reading and arithmetic away from the model raises the dev-set score from <span class="num bad">0.11</span> to <span class="num">0.31</span> while tokens per task fall from <span class="num bad">62 k</span> to <span class="num">24 k</span>. The cost moves from tokens to CPU.</p>
+  </div>
+
+  <div class="body">
+    <div class="side">§1 · for ML readers</div>
+    <section>
+      <h2><small>01 · the problem</small>Why reading and arithmetic <b>break agents</b></h2>
+      <p>On the dev set, the two heaviest failure families are not reasoning errors. They are <strong>misread drawing callouts</strong> and <strong>unit errors</strong>. A callout like <code>6000</code> means millimetres; read as metres, the moment is off by a factor of a million, and the model writes it down calmly.</p>
+      <p>Models are good at deciding <em>what</em> to compute and poor at small print and units. So the model only writes a typed spec; extraction, arithmetic and checking are code.</p>
+    </section>
+    <div></div>
+  </div>
+
+  <div class="win">
+    <div class="wh"><b>Figure 1 · Architecture</b><span>only SPEC spends tokens</span></div>
+    <div class="screen">
+      <svg viewBox="0 0 1060 220" width="100%" role="img" aria-label="Pipeline">
+        <g font-family="Helvetica,Arial,sans-serif">
+          <g fill="#f5f7f8" stroke="#e3e7ea"><rect x="0" y="30" width="138" height="92" rx="8"/><rect x="316" y="30" width="138" height="92" rx="8"/><rect x="474" y="30" width="138" height="92" rx="8"/><rect x="632" y="30" width="138" height="92" rx="8"/><rect x="790" y="30" width="138" height="92" rx="8"/></g>
+          <rect x="158" y="30" width="138" height="92" rx="8" fill="#07090b"/>
+          <g font-size="13" font-weight="700" letter-spacing="1.2" fill="#101418"><text x="14" y="60">EXTRACT</text><text x="330" y="60">SOLVE</text><text x="488" y="60">AUDIT</text><text x="646" y="60">PROVE</text><text x="804" y="60">WRITE</text></g>
+          <text x="172" y="60" font-size="13" font-weight="700" letter-spacing="1.2" fill="#3ad1b9">SPEC · LLM</text>
+          <g class="tick" style="font-size:11px"><text x="14" y="86">facts + provenance</text><text x="14" y="104">0 tokens</text><text x="330" y="86">≤ 12 kernels</text><text x="330" y="104">CPU</text><text x="488" y="86">dimension network</text><text x="488" y="104">0 tokens</text><text x="646" y="86">re-measure CAD</text><text x="646" y="104">2nd parser</text><text x="804" y="86">ledger facts only</text><text x="804" y="104">no new numbers</text></g>
+          <g font-family="ui-monospace,monospace" font-size="11" fill="#8a959f"><text x="172" y="86">typed calculation</text><text x="172" y="104">the only tokens</text></g>
+          <rect x="948" y="48" width="104" height="56" rx="28" fill="none" stroke="#0f766e" stroke-width="1.5"/><text x="978" y="81" font-size="13" font-weight="700" letter-spacing="1.2" fill="#0f766e">DONE</text>
+          <g stroke="#101418" stroke-width="1.5"><path d="M139 76h18M297 76h18M455 76h18M613 76h18M771 76h18M929 76h18"/></g>
+          <path d="M543 124 C 543 166, 227 166, 227 126" fill="none" stroke="#5b6672" stroke-dasharray="4 4"/>
+          <text x="290" y="172" class="tick">violation → re-emit only the faulty quantity</text>
+          <rect x="0" y="186" width="928" height="28" rx="6" fill="#e4f2f0"/>
+          <text x="12" y="204" class="tick" style="fill:#0f766e">LEDGER · F-03 L = 6 000 mm · S-101 p.2 · F-07 w = 12 kN/m · spec §2.3 · K-1 M = 54.0 kN·m · beam-simple</text>
+        </g>
+      </svg>
+      <figcaption><b>Figure 1.</b> Every published number points to the ledger. A done or error frame is guaranteed; forced finalisation at T-12 min.</figcaption>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="side">§2 · engineering reasoning</div>
+    <section>
+      <h2><small>02 · one number, end to end</small>A beam, <b>four lines, every source</b></h2>
+      <table class="ledger">
+        <thead><tr><th>id</th><th>quantity</th><th>value</th><th>source</th><th>audit</th></tr></thead>
+        <tbody>
+          <tr><td>F-03</td><td>span L</td><td class="v">6 000 mm</td><td>S-101 p.2</td><td>length ✓</td></tr>
+          <tr><td>F-07</td><td>load w</td><td class="v">12 kN/m</td><td>spec §2.3</td><td>force/length ✓</td></tr>
+          <tr><td>K-1</td><td>M<sub>max</sub> = wL²/8</td><td class="v">54.0 kN·m</td><td>beam-simple</td><td>torque ✓ range ✓</td></tr>
+          <tr class="err"><td>—</td><td>LLM alone</td><td class="v">54 000 000 kN·m</td><td>6000 read as m</td><td>range ✗</td></tr>
+          <tr><td>K-2</td><td>deflection δ</td><td>—</td><td>E·I missing</td><td><span class="unk">UNKNOWN</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <div></div>
+  </div>
+
+  <div class="win">
+    <div class="two">
+      <div>
+        <div class="wh"><b>Figure 2 · Score vs cost</b><span>demo</span></div>
+        <div class="screen">
+          <svg viewBox="0 0 640 320" width="100%" role="img" aria-label="Score versus tokens per task">
+            <g stroke="#eef1f3"><path d="M50 215H620M50 150H620M50 85H620M50 20H620"/></g>
+            <path d="M50 20V280H620" stroke="#101418" fill="none"/>
+            <g class="tick" text-anchor="end"><text x="42" y="284">0</text><text x="42" y="219">0.1</text><text x="42" y="154">0.2</text><text x="42" y="89">0.3</text><text x="42" y="24">0.4</text></g>
+            <g class="tick" text-anchor="middle"><text x="212.9" y="300">20 k</text><text x="375.7" y="300">40 k</text><text x="538.6" y="300">60 k tokens/task</text></g>
+            <path d="M50 190.3H620" stroke="#5b6672" stroke-dasharray="3 5"/><text x="618" y="184" class="tick" text-anchor="end">0.138 Pareto entry</text>
+            <polyline points="147.7,124 196.6,91.5 245.4,78.5 343.1,72 440.9,72" fill="none" stroke="#0f766e" stroke-width="2.5"/>
+            <circle cx="245.4" cy="78.5" r="7" fill="#0f766e"/>
+            <g fill="#fff" stroke="#101418" stroke-width="1.5"><circle cx="237.3" cy="117.5" r="5"/><circle cx="302.4" cy="137" r="5"/><circle cx="359.4" cy="169.5" r="5"/><circle cx="269.9" cy="143.5" r="5"/></g>
+            <circle cx="555" cy="208.5" r="6" fill="#b91c1c"/>
+            <g class="lab"><text x="256" y="66">full 0.31</text><text x="228" y="122" text-anchor="end">audit off</text><text x="312" y="134">ledger off</text><text x="368" y="160">kernels off</text><text x="280" y="158">gemma</text><text x="545" y="232" text-anchor="end" fill="#b91c1c">LLM alone</text></g>
+          </svg>
+          <figcaption><b>Figure 2.</b> Up-left is better; flat after 24 k tokens. <b>Demo values.</b></figcaption>
+        </div>
+      </div>
+      <div>
+        <div class="wh"><b>Figure 3 · Dev-set failures</b><span>demo</span></div>
+        <div class="screen">
+          <svg viewBox="0 0 560 300" width="100%" role="img" aria-label="Failures before and after">
+            <g class="tick" text-anchor="end"><text x="170" y="26">callout mistyped</text><text x="170" y="70">wrong scale</text><text x="170" y="114">inconsistent dim.</text><text x="170" y="158">invalid solid</text><text x="170" y="202">missing deliverable</text><text x="170" y="246">timeout</text></g>
+            <g fill="#eef1f3"><rect x="186" y="10" width="245" height="22" rx="4"/><rect x="186" y="54" width="140" height="22" rx="4"/><rect x="186" y="98" width="210" height="22" rx="4"/><rect x="186" y="142" width="105" height="22" rx="4"/><rect x="186" y="186" width="105" height="22" rx="4"/><rect x="186" y="230" width="70" height="22" rx="4"/></g>
+            <g fill="#b91c1c"><rect x="186" y="10" width="70" height="22" rx="4"/><rect x="186" y="54" width="35" height="22" rx="4"/><rect x="186" y="98" width="35" height="22" rx="4"/><rect x="186" y="142" width="70" height="22" rx="4"/><rect x="186" y="230" width="35" height="22" rx="4"/></g>
+            <g class="tick"><text x="440" y="26">7→2 ledger</text><text x="335" y="70">4→1 audit</text><text x="405" y="114">6→1 audit</text><text x="300" y="158">3→2 prove</text><text x="300" y="202" style="fill:#0f766e">3→0 write</text><text x="265" y="246">2→1 guard</text></g>
+            <text x="186" y="286" class="lab">25 → 7 on 29 tasks</text>
+          </svg>
+          <figcaption><b>Figure 3.</b> Grey = LLM alone, red = left with the harness. <b>Demo counts.</b></figcaption>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="side">§3 · cross-model<br><br>§4 · limits</div>
+    <div>
+      <section>
+        <h2><small>03 · generalizability</small>Two models, <b>same chain</b></h2>
+        <table class="cmp">
+          <thead><tr><th>model</th><th>LLM alone</th><th>harness</th><th>tokens / task</th></tr></thead>
+          <tbody><tr><td>claude-opus-5-5</td><td>0.11</td><td class="t">0.31</td><td>24 k</td></tr><tr><td>gemma-4-26b (local)</td><td>0.06</td><td class="t">0.21</td><td>27 k</td></tr></tbody>
+        </table>
+      </section>
+      <section>
+        <h2><small>04 · limits</small>Where it <b>still fails</b></h2>
+        <ul>
+          <li><strong>Twelve kernels, not more.</strong> Other tasks take the generic sympy/pint path, slower and lower-scoring.</li>
+          <li><strong>No paid code tables.</strong> Normative values come from the task's own tables or are recomputed, source cited.</li>
+          <li><strong>Raster drawings</strong> depend on OCR confidence; the verbatim text always travels with the ledger.</li>
+          <li><strong>Replicating public verify scripts</strong> was dropped: it reads as hard-coded output.</li>
+        </ul>
+      </section>
+    </div>
+    <div></div>
+  </div>
+
+  <div class="foot"><span>Apache-2.0 · reproduce: uv run python eval/run.py</span><span>V2 · planche 03 / 03 · « Cube de noyaux » · 2026-11-18</span></div>
+</div>
+</body>
+</html>
