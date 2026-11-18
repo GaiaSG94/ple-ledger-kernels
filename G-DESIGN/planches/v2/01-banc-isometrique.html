@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>V2-01 · Banc isométrique — PLE Ledger Kernels Writeup</title>
+<style>
+  :root{
+    --bg:#ffffff; --bg-2:#f5f7f8; --ink:#101418; --grey:#5b6672; --rule:#e3e7ea;
+    --teal:#0f766e; --teal-2:#1f8a7f; --teal-soft:#e4f2f0; --red:#b91c1c;
+    --serif: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink)}
+  body{font:18px/1.62 var(--serif)}
+  .wrap{width:1440px;margin:0 auto}
+
+  .bar{display:flex;justify-content:space-between;align-items:center;height:64px;padding:0 64px;border-bottom:1px solid var(--rule);font:13px/1 var(--sans);color:var(--grey)}
+  .bar .brand{font:700 15px/1 var(--sans);color:var(--ink);letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+  .bar .brand i{width:16px;height:16px;background:var(--teal);display:inline-block;transform:skewY(-30deg) scaleX(.86)}
+  .bar nav{display:flex;gap:28px}
+  .bar .sha{font:12px var(--mono)}
+  .btn{font:600 13px/1 var(--sans);padding:11px 16px;border-radius:6px;background:var(--ink);color:#fff;text-decoration:none}
+  .demo{font:11px/1 var(--mono);border:1px dashed var(--grey);border-radius:4px;padding:6px 8px;color:var(--grey)}
+
+  /* hero: text card overlapping the iso scene (Baseten), chips around (Kivo) */
+  .hero{position:relative;height:720px;background:
+      linear-gradient(var(--rule) 1px,transparent 1px) 0 0/48px 48px,
+      linear-gradient(90deg,var(--rule) 1px,transparent 1px) 0 0/48px 48px, var(--bg-2);
+    border-bottom:1px solid var(--rule);overflow:hidden}
+  .scene{position:absolute;right:30px;top:10px;width:860px;height:720px}
+  .iv{font:700 17px var(--mono)}
+  .il{font:600 12px var(--sans);fill:#5b6672}
+  .card{position:absolute;left:64px;top:64px;width:560px;background:#fff;border:1px solid var(--rule);border-radius:10px;padding:40px 40px 34px;box-shadow:0 1px 2px rgba(16,20,24,.06),0 24px 60px rgba(16,20,24,.08)}
+  .eyebrow{font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);display:flex;align-items:center;gap:8px}
+  .eyebrow::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--teal)}
+  h1{font:600 58px/1.02 var(--sans);letter-spacing:-.035em;margin:18px 0 0}
+  h1 span{color:var(--grey);font-weight:400}
+  .dek{font:18px/1.55 var(--serif);color:#2c333a;margin:22px 0 0}
+  .finding{margin-top:26px;border-top:1px solid var(--rule);padding-top:22px;display:grid;grid-template-columns:repeat(3,1fr)}
+  .finding div{font:11px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--grey);border-left:1px solid var(--rule);padding-left:16px}
+  .finding div:first-child{border-left:0;padding-left:0}
+  .finding b{display:block;font:600 34px/1.1 var(--mono);letter-spacing:-.03em;color:var(--ink);text-transform:none;margin-top:6px}
+  .finding b.t{color:var(--teal)} .finding b.r{color:var(--red)}
+  .finding small{display:block;font:12px var(--mono);text-transform:none;letter-spacing:0;color:var(--grey);margin-top:2px}
+
+  .chip{position:absolute;background:#fff;border:1px solid var(--rule);border-radius:999px;padding:7px 12px 7px 10px;font:12px/1 var(--mono);color:var(--ink);box-shadow:0 6px 18px rgba(16,20,24,.07);display:flex;gap:8px;align-items:center;white-space:nowrap}
+  .chip i{width:7px;height:7px;border-radius:50%;background:var(--teal)}
+  .chip.r i{background:var(--red)} .chip.u{border-style:dashed;color:var(--grey)} .chip.u i{background:transparent;border:1px dashed var(--grey)}
+  .scene-cap{position:absolute;right:64px;bottom:22px;font:12px var(--mono);color:var(--grey)}
+
+  /* model wall (Baseten logo grid → models tested) */
+  .wall{display:grid;grid-template-columns:200px repeat(4,1fr);border-bottom:1px solid var(--rule)}
+  .wall > div{padding:22px 24px;border-left:1px solid var(--rule);font:13px/1.4 var(--sans);color:var(--grey)}
+  .wall > div:first-child{border-left:0;padding-left:64px;font:600 11px/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  .wall b{display:block;font:600 16px/1.2 var(--sans);color:var(--ink);margin-bottom:6px}
+  .wall .m{font:600 13px var(--mono);color:var(--teal)}
+
+  /* body */
+  .body{display:grid;grid-template-columns:240px 700px 1fr;gap:0 64px;padding:0 64px}
+  .toc{position:sticky;top:24px;align-self:start;padding-top:96px;font:13px/2 var(--sans);color:var(--grey)}
+  .toc a{color:inherit;text-decoration:none;display:block;border-left:2px solid var(--rule);padding-left:12px}
+  .toc a.on{color:var(--ink);border-color:var(--teal);font-weight:600}
+  section{padding-top:96px}
+  h2{font:600 34px/1.12 var(--sans);letter-spacing:-.025em;margin:0 0 20px}
+  h2 small{display:block;font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:14px}
+  p{margin:0 0 18px}
+  code{font:15px var(--mono);background:var(--bg-2);border:1px solid var(--rule);padding:1px 6px;border-radius:4px}
+
+  figure{margin:28px 0 0;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff}
+  .fhead{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--rule);background:var(--bg-2);font:12px var(--mono);color:var(--grey)}
+  .fhead b{font:600 13px var(--sans);color:var(--ink)}
+  .fbody{padding:24px}
+  figcaption{font:14px/1.55 var(--sans);color:var(--grey);padding:0 24px 20px}
+  figcaption b{color:var(--ink)}
+  .wide{grid-column:2 / span 2}
+  .tick{font:12px var(--mono);fill:#5b6672}.lab{font:600 13px var(--sans);fill:#101418}
+
+  .ledger{width:100%;border-collapse:collapse;font:14px/1.45 var(--mono)}
+  .ledger th{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--grey);text-align:left;padding:10px 12px;background:var(--bg-2);border-bottom:1px solid var(--rule)}
+  .ledger td{padding:12px;border-bottom:1px solid var(--rule)}
+  .ledger td.v{color:var(--teal);font-weight:600;text-align:right}
+  .ledger tr.err td{color:var(--red)} .ledger tr.err td.v{color:var(--red);text-decoration:line-through}
+  .pill{display:inline-block;font:600 11px/1 var(--mono);padding:4px 8px;border-radius:999px;background:var(--teal-soft);color:var(--teal)}
+  .pill.r{background:#fbeaea;color:var(--red)} .pill.u{background:none;border:1px dashed var(--grey);color:var(--grey)}
+  ul{padding-left:20px} li{margin-bottom:10px}
+  .foot{display:flex;justify-content:space-between;margin-top:110px;padding:24px 64px 40px;border-top:1px solid var(--rule);font:12.5px var(--mono);color:var(--grey)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .chip{animation:float 6s ease-in-out infinite}
+    .chip:nth-child(2n){animation-delay:-3s}
+    @keyframes float{50%{transform:translateY(-6px)}}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{font-size:10.5pt}.wrap{width:auto}
+    .bar nav,.btn,.toc{display:none}.bar{padding:0}
+    .hero{height:auto;background:none;border:0}.scene{position:static;width:100%;height:110mm}
+    .card{position:static;width:auto;box-shadow:none;border:0;padding:0}
+    .chip{display:none}
+    .wall{grid-template-columns:repeat(5,1fr)}.wall>div:first-child{padding-left:0}
+    .body{grid-template-columns:1fr;padding:0}.wide{grid-column:1}
+    section{padding-top:8mm}figure{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <span class="brand"><i></i>ple-ledger-kernels</span>
+    <nav><span>Finding</span><span>Architecture</span><span>Score vs cost</span><span>Failures</span><span>Limits</span></nav>
+    <span class="sha">commit ········ (SHA 40 car. au commit final)</span>
+    <span class="demo">chiffres de démo · eval/run.py</span>
+    <a class="btn" href="#">Repo on GitHub</a>
+  </header>
+
+  <div class="hero">
+    <svg class="scene" viewBox="100 150 700 600" role="img" aria-label="Isometric blocks: dev-set score per configuration">
+<polygon points="330.0,330.0 382.0,360.0 330.0,390.0 278.0,360.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="278.0,360.0 330.0,390.0 278.0,420.0 226.1,390.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="226.1,390.0 278.0,420.0 226.1,450.0 174.1,420.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="174.1,420.0 226.1,450.0 174.1,480.0 122.2,450.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="382.0,360.0 433.9,390.0 382.0,420.0 330.0,390.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="330.0,390.0 382.0,420.0 330.0,450.0 278.0,420.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="278.0,420.0 330.0,450.0 278.0,480.0 226.1,450.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="226.1,450.0 278.0,480.0 226.1,510.0 174.1,480.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="433.9,390.0 485.9,420.0 433.9,450.0 382.0,420.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="382.0,420.0 433.9,450.0 382.0,480.0 330.0,450.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="330.0,450.0 382.0,480.0 330.0,510.0 278.0,480.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="278.0,480.0 330.0,510.0 278.0,540.0 226.1,510.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="485.9,420.0 537.8,450.0 485.9,480.0 433.9,450.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="433.9,450.0 485.9,480.0 433.9,510.0 382.0,480.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="382.0,480.0 433.9,510.0 382.0,540.0 330.0,510.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="330.0,510.0 382.0,540.0 330.0,570.0 278.0,540.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="537.8,450.0 589.8,480.0 537.8,510.0 485.9,480.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="485.9,480.0 537.8,510.0 485.9,540.0 433.9,510.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="433.9,510.0 485.9,540.0 433.9,570.0 382.0,540.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="382.0,540.0 433.9,570.0 382.0,600.0 330.0,570.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="589.8,480.0 641.8,510.0 589.8,540.0 537.8,510.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="537.8,510.0 589.8,540.0 537.8,570.0 485.9,540.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="485.9,540.0 537.8,570.0 485.9,600.0 433.9,570.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="433.9,570.0 485.9,600.0 433.9,630.0 382.0,600.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="641.8,510.0 693.7,540.0 641.8,570.0 589.8,540.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="589.8,540.0 641.8,570.0 589.8,600.0 537.8,570.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="537.8,570.0 589.8,600.0 537.8,630.0 485.9,600.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="485.9,600.0 537.8,630.0 485.9,660.0 433.9,630.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="693.7,540.0 745.7,570.0 693.7,600.0 641.8,570.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="641.8,570.0 693.7,600.0 641.8,630.0 589.8,600.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="589.8,600.0 641.8,630.0 589.8,660.0 537.8,630.0" fill="#f3f6f6" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="537.8,630.0 589.8,660.0 537.8,690.0 485.9,660.0" fill="#ffffff" stroke="#dde3e6" stroke-width="1"/>
+<polygon points="239.1,397.5 278.0,420.0 278.0,351.8 239.1,329.3" fill="#d5dbdf"/>
+<polygon points="317.0,397.5 278.0,420.0 278.0,351.8 317.0,329.3" fill="#b9c2c8"/>
+<polygon points="278.0,306.8 317.0,329.3 278.0,351.8 239.1,329.3" fill="#e9edef"/>
+<text x="278.0" y="315.3" text-anchor="middle" class="iv" fill="#b91c1c">0.11</text>
+<text x="265.1" y="440.0" class="il" text-anchor="middle">LLM alone</text>
+<polygon points="317.0,442.5 356.0,465.0 356.0,359.6 317.0,337.1" fill="#d5dbdf"/>
+<polygon points="394.9,442.5 356.0,465.0 356.0,359.6 394.9,337.1" fill="#b9c2c8"/>
+<polygon points="356.0,314.6 394.9,337.1 356.0,359.6 317.0,337.1" fill="#e9edef"/>
+<text x="356.0" y="323.1" text-anchor="middle" class="iv" fill="#101418">0.17</text>
+<text x="343.1" y="485.0" class="il" text-anchor="middle">kernels off</text>
+<polygon points="394.9,487.5 433.9,510.0 433.9,373.6 394.9,351.1" fill="#d5dbdf"/>
+<polygon points="472.9,487.5 433.9,510.0 433.9,373.6 472.9,351.1" fill="#b9c2c8"/>
+<polygon points="433.9,328.6 472.9,351.1 433.9,373.6 394.9,351.1" fill="#e9edef"/>
+<text x="433.9" y="337.1" text-anchor="middle" class="iv" fill="#101418">0.22</text>
+<text x="421.0" y="530.0" class="il" text-anchor="middle">ledger off</text>
+<polygon points="472.9,532.5 511.9,555.0 511.9,400.0 472.9,377.5" fill="#d5dbdf"/>
+<polygon points="550.8,532.5 511.9,555.0 511.9,400.0 550.8,377.5" fill="#b9c2c8"/>
+<polygon points="511.9,355.0 550.8,377.5 511.9,400.0 472.9,377.5" fill="#e9edef"/>
+<text x="511.9" y="363.5" text-anchor="middle" class="iv" fill="#101418">0.25</text>
+<text x="498.9" y="575.0" class="il" text-anchor="middle">audit off</text>
+<polygon points="550.8,577.5 589.8,600.0 589.8,407.8 550.8,385.3" fill="#1f8a7f"/>
+<polygon points="628.8,577.5 589.8,600.0 589.8,407.8 628.8,385.3" fill="#0f766e"/>
+<polygon points="589.8,362.8 628.8,385.3 589.8,407.8 550.8,385.3" fill="#7fc4b9"/>
+<text x="589.8" y="371.3" text-anchor="middle" class="iv" fill="#0f766e">0.31</text>
+<text x="576.9" y="620.0" class="il" text-anchor="middle">full harness</text>
+
+    </svg>
+
+    <div class="card">
+      <div class="eyebrow">Kaggle Writeup · Stage 1 · 29 dev tasks</div>
+      <h1>The model never reads the drawing. <span>It only specifies.</span></h1>
+      <p class="dek">Typed facts are extracted with provenance, deterministic kernels compute with unit checks, and every number in the deliverable is audited dimension by dimension.</p>
+      <div class="finding">
+        <div>dev-set score<b class="t">0.31</b><small>LLM alone <span style="color:var(--red)">0.11</span></small></div>
+        <div>tokens / task<b>24 k</b><small>LLM alone 62 k</small></div>
+        <div>failures<b>25 → 7</b><small>on 29 tasks</small></div>
+      </div>
+    </div>
+
+    <span class="chip" style="left:700px;top:120px"><i></i>F-03 · L = 6 000 mm · S-101 p.2</span>
+    <span class="chip" style="left:1130px;top:200px"><i></i>K-1 · beam-simple · 54.0 kN·m</span>
+    <span class="chip" style="left:1190px;top:470px"><i></i>AUDIT · torque ✓ range ✓</span>
+    <span class="chip r" style="left:640px;top:560px"><i></i>LLM alone · 6000 read as m</span>
+    <span class="chip u" style="left:980px;top:620px"><i></i>K-2 · deflection · UNKNOWN</span>
+    <div class="scene-cap">block height = dev-set score · teal = full harness · demo values</div>
+  </div>
+
+  <div class="wall">
+    <div>Tested on<br>29 public dev tasks</div>
+    <div><b>claude-opus-5-5</b>sponsored · <span class="m">0.31</span> · 24 k tok</div>
+    <div><b>gemma-4-26b</b>local, open-weight · <span class="m">0.21</span> · 27 k tok</div>
+    <div><b>12 kernels max</b>beam, frame-2d, truss, mna-ac, three-phase, cable-size…</div>
+    <div><b>0 hard-coded outputs</b>artifacts re-scored and replayed live</div>
+  </div>
+
+  <div class="body">
+    <nav class="toc">
+      <a class="on">01 · Why agents misread</a><a>02 · Architecture</a><a>03 · One number</a><a>04 · Score vs cost</a><a>05 · Failures</a><a>06 · Limits</a>
+    </nav>
+    <div>
+      <section>
+        <h2><small>01 · for ML readers</small>Why reading and arithmetic break agents</h2>
+        <p>An engineering task hands the agent a drawing, a specification and a question: how much does this beam bend, which cable section carries this load. On the dev set, the two heaviest failure families are not reasoning errors. They are <strong>misread drawing callouts</strong> and <strong>unit errors</strong>.</p>
+        <p>A callout like <code>6000</code> on a structural drawing means millimetres. Read as metres, the bending moment is off by a factor of a million, and the model writes it down calmly. Models are good at deciding <em>what</em> to compute and poor at small print and units. So we split the job.</p>
+      </section>
+    </div>
+    <div></div>
+
+    <div></div>
+    <section class="wide">
+      <h2><small>02 · Figure 1</small>The LLM lives in one box</h2>
+      <figure>
+        <div class="fhead"><b>Figure 1 · Architecture</b><span>EXTRACT → SPEC → SOLVE → AUDIT → PROVE → WRITE → DONE</span></div>
+        <div class="fbody">
+          <svg viewBox="0 0 1060 220" width="100%" role="img" aria-label="Pipeline">
+            <g font-family="Helvetica,Arial,sans-serif">
+              <g fill="#fff" stroke="#e3e7ea"><rect x="0" y="30" width="138" height="92" rx="8"/><rect x="316" y="30" width="138" height="92" rx="8"/><rect x="474" y="30" width="138" height="92" rx="8"/><rect x="632" y="30" width="138" height="92" rx="8"/><rect x="790" y="30" width="138" height="92" rx="8"/></g>
+              <rect x="158" y="30" width="138" height="92" rx="8" fill="#0f766e"/>
+              <g font-size="13" font-weight="700" letter-spacing="1.2" fill="#101418"><text x="14" y="60">EXTRACT</text><text x="330" y="60">SOLVE</text><text x="488" y="60">AUDIT</text><text x="646" y="60">PROVE</text><text x="804" y="60">WRITE</text></g>
+              <text x="172" y="60" font-size="13" font-weight="700" letter-spacing="1.2" fill="#fff">SPEC · LLM</text>
+              <g class="tick" style="font-size:11px"><text x="14" y="86">facts + provenance</text><text x="14" y="104">0 tokens</text><text x="330" y="86">≤ 12 kernels</text><text x="330" y="104">CPU</text><text x="488" y="86">dimension network</text><text x="488" y="104">0 tokens</text><text x="646" y="86">re-measure CAD</text><text x="646" y="104">2nd parser</text><text x="804" y="86">ledger facts only</text><text x="804" y="104">no new numbers</text></g>
+              <g font-family="ui-monospace,monospace" font-size="11" fill="#d7efeb"><text x="172" y="86">typed calculation</text><text x="172" y="104">the only tokens</text></g>
+              <rect x="948" y="48" width="104" height="56" rx="28" fill="#101418"/><text x="978" y="81" font-size="13" font-weight="700" letter-spacing="1.2" fill="#fff">DONE</text>
+              <g stroke="#101418" stroke-width="1.5"><path d="M139 76h18M297 76h18M455 76h18M613 76h18M771 76h18M929 76h18"/></g>
+              <path d="M543 124 C 543 166, 227 166, 227 126" fill="none" stroke="#5b6672" stroke-dasharray="4 4"/>
+              <text x="290" y="172" class="tick">violation → re-emit only the faulty quantity</text>
+              <rect x="0" y="186" width="928" height="28" rx="6" fill="#e4f2f0"/>
+              <text x="12" y="204" class="tick" style="fill:#0f766e">LEDGER · F-03 L = 6 000 mm · S-101 p.2 · F-07 w = 12 kN/m · spec §2.3 · K-1 M = 54.0 kN·m · beam-simple</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption><b>Figure 1.</b> Only SPEC spends tokens. Every published number must point to the ledger. A done or error frame is guaranteed; forced finalisation at T-12 min.</figcaption>
+      </figure>
+    </section>
+
+    <div></div>
+    <section>
+      <h2><small>03 · engineering reasoning</small>One number, end to end</h2>
+      <p>Simply supported beam under uniform load: the four lines a licensed engineer writes by hand, each one traceable.</p>
+      <table class="ledger">
+        <thead><tr><th>id</th><th>quantity</th><th>source</th><th>audit</th><th style="text-align:right">value</th></tr></thead>
+        <tbody>
+          <tr><td>F-03</td><td>span L</td><td>S-101 p.2 · bbox 412,188</td><td><span class="pill">length</span></td><td class="v">6 000 mm</td></tr>
+          <tr><td>F-07</td><td>load w</td><td>spec §2.3</td><td><span class="pill">force/length</span></td><td class="v">12 kN/m</td></tr>
+          <tr><td>K-1</td><td>M<sub>max</sub> = wL²/8</td><td>beam-simple</td><td><span class="pill">torque · range</span></td><td class="v">54.0 kN·m</td></tr>
+          <tr class="err"><td>—</td><td>LLM alone</td><td>6000 read as m</td><td><span class="pill r">range ✗</span></td><td class="v">54 000 000 kN·m</td></tr>
+          <tr><td>K-2</td><td>deflection δ</td><td>E·I not on drawing</td><td><span class="pill u">UNKNOWN</span></td><td class="v" style="color:var(--grey)">—</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <div></div>
+
+    <div></div>
+    <section class="wide">
+      <h2><small>04 · efficiency · 05 · failure analysis</small>Score vs cost, and what each brick removes</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <figure style="margin:0">
+          <div class="fhead"><b>Figure 2 · Score vs cost</b><span>demo</span></div>
+          <div class="fbody">
+            <svg viewBox="0 0 640 320" width="100%" role="img" aria-label="Score versus tokens per task">
+              <g stroke="#eef1f3"><path d="M50 215H620M50 150H620M50 85H620M50 20H620"/></g>
+              <path d="M50 20V280H620" stroke="#101418" fill="none"/>
+              <g class="tick" text-anchor="end"><text x="42" y="284">0</text><text x="42" y="219">0.1</text><text x="42" y="154">0.2</text><text x="42" y="89">0.3</text><text x="42" y="24">0.4</text></g>
+              <g class="tick" text-anchor="middle"><text x="212.9" y="300">20 k</text><text x="375.7" y="300">40 k</text><text x="538.6" y="300">60 k tokens/task</text></g>
+              <path d="M50 190.3H620" stroke="#5b6672" stroke-dasharray="3 5"/><text x="618" y="184" class="tick" text-anchor="end">0.138 Pareto entry</text>
+              <polyline points="147.7,124 196.6,91.5 245.4,78.5 343.1,72 440.9,72" fill="none" stroke="#0f766e" stroke-width="2.5"/>
+              <circle cx="245.4" cy="78.5" r="7" fill="#0f766e"/>
+              <g fill="#fff" stroke="#101418" stroke-width="1.5"><circle cx="237.3" cy="117.5" r="5"/><circle cx="302.4" cy="137" r="5"/><circle cx="359.4" cy="169.5" r="5"/><circle cx="269.9" cy="143.5" r="5"/></g>
+              <circle cx="555" cy="208.5" r="6" fill="#b91c1c"/>
+              <g class="lab"><text x="256" y="66">full 0.31</text><text x="228" y="122" text-anchor="end">audit off</text><text x="312" y="134">ledger off</text><text x="368" y="160">kernels off</text><text x="280" y="158">gemma</text><text x="545" y="232" text-anchor="end" fill="#b91c1c">LLM alone</text></g>
+            </svg>
+          </div>
+          <figcaption><b>Figure 2.</b> Up-left is better; flat after 24 k tokens, the rest is CPU. <b>Demo values.</b></figcaption>
+        </figure>
+        <figure style="margin:0">
+          <div class="fhead"><b>Figure 3 · Dev-set failures</b><span>demo</span></div>
+          <div class="fbody">
+            <svg viewBox="0 0 560 300" width="100%" role="img" aria-label="Failures before and after">
+              <g class="tick" text-anchor="end"><text x="170" y="26">callout mistyped</text><text x="170" y="70">wrong scale</text><text x="170" y="114">inconsistent dim.</text><text x="170" y="158">invalid solid</text><text x="170" y="202">missing deliverable</text><text x="170" y="246">timeout</text></g>
+              <g fill="#eef1f3"><rect x="186" y="10" width="245" height="22" rx="4"/><rect x="186" y="54" width="140" height="22" rx="4"/><rect x="186" y="98" width="210" height="22" rx="4"/><rect x="186" y="142" width="105" height="22" rx="4"/><rect x="186" y="186" width="105" height="22" rx="4"/><rect x="186" y="230" width="70" height="22" rx="4"/></g>
+              <g fill="#b91c1c"><rect x="186" y="10" width="70" height="22" rx="4"/><rect x="186" y="54" width="35" height="22" rx="4"/><rect x="186" y="98" width="35" height="22" rx="4"/><rect x="186" y="142" width="70" height="22" rx="4"/><rect x="186" y="230" width="35" height="22" rx="4"/></g>
+              <g class="tick"><text x="440" y="26">7→2 ledger</text><text x="335" y="70">4→1 audit</text><text x="405" y="114">6→1 audit</text><text x="300" y="158">3→2 prove</text><text x="300" y="202" style="fill:#0f766e">3→0 write</text><text x="265" y="246">2→1 guard</text></g>
+              <text x="186" y="286" class="lab">25 → 7 on 29 tasks</text>
+            </svg>
+          </div>
+          <figcaption><b>Figure 3.</b> Grey = LLM alone, red = left with the harness. <b>Demo counts.</b></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div></div>
+    <section>
+      <h2><small>06 · limits</small>Where it still fails</h2>
+      <ul>
+        <li><strong>Twelve kernels, not more.</strong> Other tasks take the generic sympy/pint path, slower and lower-scoring.</li>
+        <li><strong>No paid code tables.</strong> Normative values come from the task's own tables or are recomputed, source cited.</li>
+        <li><strong>Raster drawings</strong> depend on OCR confidence; the verbatim text always travels with the ledger.</li>
+        <li><strong>Replicating public verify scripts</strong> was dropped: it reads as hard-coded output.</li>
+      </ul>
+    </section>
+    <div></div>
+  </div>
+
+  <div class="foot"><span>Apache-2.0 · reproduce: uv run python eval/run.py</span><span>V2 · planche 01 / 03 · « Banc isométrique » · 2026-11-18</span></div>
+</div>
+</body>
+</html>

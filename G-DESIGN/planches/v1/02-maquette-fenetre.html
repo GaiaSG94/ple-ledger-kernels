@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>02 · Maquette &amp; fenêtre — PLE Ledger Kernels Writeup</title>
+<style>
+  :root{
+    --sand:#e8e0d2; --sand-2:#ddd3c2; --sand-3:#c9bda8; --paper:#fffdf8; --ink:#101418; --grey:#5b6672; --rule:#e7e0d3;
+    --teal:#0f766e; --teal-soft:#dcefeb; --red:#b91c1c;
+    --serif: "Iowan Old Style", Charter, "Bitstream Charter", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--sand);color:var(--ink)}
+  body{font:18px/1.65 var(--serif)}
+  .wrap{width:1440px;margin:0 auto;padding:36px 0 120px}
+
+  .top{display:flex;justify-content:space-between;align-items:center;padding:0 80px;font:13px/1 var(--sans);color:var(--grey)}
+  .top b{color:var(--ink);font-weight:600}
+  .chip{font:12px/1 var(--mono);background:var(--paper);border-radius:999px;padding:9px 14px;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+  .chip.demo{background:transparent;border:1px dashed var(--grey)}
+
+  /* the window: light from the left, shadow to the right */
+  .window{margin:34px 80px 0;background:var(--paper);border-radius:6px;
+    box-shadow: -1px -1px 0 #fff inset, 24px 28px 60px rgba(70,52,28,.18), 6px 8px 14px rgba(70,52,28,.10);
+    position:relative}
+  .window::before{content:"";position:absolute;inset:0;border-radius:6px;pointer-events:none;
+    box-shadow: inset 14px 0 0 -12px rgba(255,255,255,.9)}
+
+  .open{display:grid;grid-template-columns:1fr 1fr;min-height:640px}
+  .open .t{padding:80px 64px 64px 88px;display:flex;flex-direction:column;justify-content:space-between}
+  h1{margin:0;font-weight:400}
+  h1 .i{display:block;white-space:nowrap;font:italic 400 76px/1 var(--serif);letter-spacing:-.02em}
+  h1 .s{display:block;font:500 70px/1 var(--sans);letter-spacing:-.04em;margin:10px 0 0 64px}
+  h1 .s em{font-style:normal;color:var(--teal)}
+  .dek{font:20px/1.5 var(--serif);color:#2a2f35;max-width:520px;margin:36px 0 0}
+  .meta{font:12.5px/1.7 var(--mono);color:var(--grey);display:grid;grid-template-columns:auto 1fr;gap:0 18px;margin-top:40px}
+  .meta b{color:var(--ink);font-weight:500}
+
+  .finding{background:var(--sand);border-radius:4px;padding:28px 30px;margin-top:40px;position:relative}
+  .finding .k{font:600 11px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--grey)}
+  .finding p{font:500 22px/1.42 var(--sans);letter-spacing:-.01em;margin:12px 0 0}
+  .num{font-family:var(--mono);font-weight:600;color:var(--teal);white-space:nowrap}
+  .num.bad{color:var(--red)}
+  .num sup{font:500 10px/1 var(--mono);color:var(--grey);margin-left:3px}
+
+  /* diorama */
+  .dio{background:linear-gradient(var(--sand-2),var(--sand-2)) ;border-radius:0 6px 0 0;position:relative;overflow:hidden}
+  .dio svg{position:absolute;inset:0;width:100%;height:100%}
+  .dio .cap{position:absolute;left:28px;bottom:24px;font:12px/1.5 var(--mono);color:#4b4237}
+  .face-top{fill:#fffdf8}.face-l{fill:#efe7d9}.face-r{fill:#d9cdb8}
+  .llm .face-top{fill:#2a3038}.llm .face-l{fill:#1b2026}.llm .face-r{fill:#101418}
+  .stn text{font:600 13px var(--sans);letter-spacing:.1em;fill:var(--ink)}
+  .stn .s{font:500 11px var(--mono);letter-spacing:0;fill:#5b6672}
+  .path{fill:none;stroke:#fffdf8;stroke-width:14;stroke-linecap:round;stroke-linejoin:round}
+  .path2{fill:none;stroke:var(--teal);stroke-width:2;stroke-dasharray:2 7;stroke-linecap:round}
+  .token{fill:var(--teal)}
+  @media (prefers-reduced-motion:no-preference){
+    .token{offset-path:path("M118 470 L262 388 L406 470 L550 388 L622 430");animation:walk 7s linear infinite}
+    @keyframes walk{from{offset-distance:0%}to{offset-distance:100%}}
+  }
+
+  /* reading column */
+  .body{display:grid;grid-template-columns:260px 680px 1fr;gap:0 56px;padding:0 88px}
+  .side{font:12.5px/1.6 var(--mono);color:var(--grey);padding-top:104px}
+  .side .pv{display:block;margin-bottom:10px}
+  .side .pv b{color:var(--teal);font-weight:600}
+  h2{font:italic 400 44px/1.1 var(--serif);letter-spacing:-.01em;margin:96px 0 22px}
+  h2 small{display:block;font:600 11px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--grey);font-style:normal;margin-bottom:16px}
+  p{margin:0 0 18px}
+  code{font:15px var(--mono);background:var(--sand);padding:1px 6px;border-radius:3px}
+
+  /* figure windows inside the page */
+  .fig{margin:28px 88px 0;background:var(--sand);border-radius:6px;padding:28px;position:relative}
+  .fig .pane{background:var(--paper);border-radius:4px;padding:28px 32px 22px;box-shadow:16px 18px 36px rgba(70,52,28,.14)}
+  .fig .lbl{font:600 11px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--grey);margin:0 0 14px 2px;display:flex;justify-content:space-between}
+  .fig .lbl i{font-style:normal;font-family:var(--mono);letter-spacing:0;text-transform:none}
+  figcaption{font:14px/1.55 var(--sans);color:var(--grey);margin-top:16px}
+  figcaption b{color:var(--ink)}
+  .two{display:grid;grid-template-columns:minmax(0,1fr);gap:36px}
+
+  .ax{stroke:var(--ink);stroke-width:1.2;fill:none}.grid{stroke:#ece5d8}
+  .tick{font:12px var(--mono);fill:var(--grey)}.lab{font:500 13px var(--sans);fill:var(--ink)}
+
+  /* specimen row */
+  .spec{display:grid;grid-template-columns:repeat(6,1fr);gap:18px;margin-top:6px}
+  .sp{text-align:center}
+  .orb{width:112px;height:112px;margin:0 auto;border-radius:50%;background:radial-gradient(circle at 34% 30%,#fffdf8 0 18%,#efe7d9 55%,#d6c9b2 100%);box-shadow:10px 14px 22px rgba(70,52,28,.18);position:relative;display:grid;place-items:center}
+  .orb b{font:600 34px/1 var(--mono);color:var(--red)}
+  .orb s{position:absolute;top:10px;right:6px;font:500 13px/1 var(--mono);color:var(--grey)}
+  .orb.zero b{color:var(--teal)}
+  .sp .n{font:500 14px/1.3 var(--sans);margin-top:16px}
+  .sp .w{font:12px/1.3 var(--mono);color:var(--grey);margin-top:4px}
+
+  .ledger{width:100%;border-collapse:collapse;font:14px/1.45 var(--mono);margin:8px 0 22px}
+  .ledger th{font:600 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--grey);text-align:left;border-bottom:1px solid var(--ink);padding:10px 8px}
+  .ledger td{border-bottom:1px solid var(--rule);padding:12px 8px}
+  .ledger td.v{color:var(--teal);font-weight:600}
+  .ledger tr.err td{color:var(--red)} .ledger tr.err td.v{text-decoration:line-through}
+  .ledger .unk{color:var(--grey);border:1px dashed var(--grey);border-radius:999px;padding:2px 8px;font-size:11px}
+
+  .cmp{width:100%;border-collapse:collapse;font:15px var(--mono)}
+  .cmp th{font:600 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--grey);text-align:right;padding:8px;border-bottom:1px solid var(--ink)}
+  .cmp td{text-align:right;padding:11px 8px;border-bottom:1px solid var(--rule)}
+  .cmp td:first-child,.cmp th:first-child{text-align:left;font-family:var(--sans)}
+  ul{padding-left:20px} li{margin-bottom:10px}
+
+  .foot{display:flex;justify-content:space-between;padding:40px 88px 44px;margin-top:96px;border-top:1px solid var(--rule);font:12.5px var(--mono);color:var(--grey)}
+
+  @media print{
+    @page{size:A4;margin:14mm}
+    html,body{background:#fff}body{font-size:10.5pt}
+    .wrap{width:auto;padding:0}.top{padding:0}
+    .window{margin:0;box-shadow:none}
+    .open{grid-template-columns:1fr;min-height:0}.open .t{padding:0}
+    .dio{height:90mm}
+    h1 .i{font-size:36pt}h1 .s{font-size:30pt;margin-left:12mm}
+    .body{grid-template-columns:28mm 1fr 0;padding:0;gap:0 6mm}
+    .fig{margin:6mm 0;padding:0;background:none;break-inside:avoid}.fig .pane{box-shadow:none;border:1px solid #ccc}
+    h2{font-size:20pt;margin-top:10mm}
+    .orb{box-shadow:none;border:1px solid #bbb;background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span><b>PLE · Agent Harness</b> — Kaggle Writeup, Stage 1</span>
+    <span class="chip">github.com/GaiaSG94/ple-ledger-kernels · commit ········ (SHA au commit final)</span>
+    <span class="chip demo">chiffres de démo · remplacés par eval/run.py</span>
+  </div>
+
+  <div class="window">
+
+    <section class="open">
+      <div class="t">
+        <div>
+          <h1><span class="i">The model never</span><span class="s">reads the <em>drawing</em>.</span></h1>
+          <p class="dek">An engineering agent harness in which the LLM only specifies. Typed facts are extracted with provenance, deterministic kernels compute with unit checks, and every number in the deliverable is audited dimension by dimension.</p>
+          <div class="finding">
+            <div class="k">Main finding</div>
+            <p>Taking reading and arithmetic away from the model raises the dev-set score from <span class="num bad">0.11</span> to <span class="num">0.31<sup>F2</sup></span> while tokens per task fall from <span class="num bad">62 k</span> to <span class="num">24 k<sup>F2</sup></span>.</p>
+          </div>
+        </div>
+        <div class="meta"><span>track</span><b>Agent Harness</b><span>model</span><b>claude-opus-5-5</b><span>dev set</span><b>29 public tasks</b><span>length</span><b>1 870 / 2 000 words</b></div>
+      </div>
+
+      <div class="dio" aria-label="Figure 1 preview: the chain as a path across six stations">
+        <svg viewBox="30 40 690 650" preserveAspectRatio="xMidYMid meet">
+          <!-- plinth -->
+          <g transform="translate(0,0)">
+            <path d="M60 470 L370 290 L680 470 L370 650 Z" fill="#cfc3ad"/>
+            <path d="M60 470 L370 650 L370 676 L60 496 Z" fill="#bfb198"/>
+            <path d="M680 470 L370 650 L370 676 L680 496 Z" fill="#a99a80"/>
+          </g>
+          <path class="path" d="M118 470 L262 388 L406 470 L550 388 L622 430"/>
+          <path class="path2" d="M118 470 L262 388 L406 470 L550 388 L622 430"/>
+          <!-- station helper: iso box at (x,y) -->
+          <g class="stn" transform="translate(118,470)"><path class="face-top" d="M0 -40 L40 -60 L80 -40 L40 -20Z" transform="translate(-40,0)"/><path class="face-l" d="M-40 -40 L0 -20 L0 10 L-40 -10Z"/><path class="face-r" d="M40 -40 L0 -20 L0 10 L40 -10Z"/><text x="-44" y="-78">EXTRACT</text><text class="s" x="-44" y="-64">facts + provenance</text></g>
+          <g class="stn llm" transform="translate(262,388)"><path class="face-top" d="M0 -40 L40 -60 L80 -40 L40 -20Z" transform="translate(-40,0)"/><path class="face-l" d="M-40 -40 L0 -20 L0 10 L-40 -10Z"/><path class="face-r" d="M40 -40 L0 -20 L0 10 L40 -10Z"/><text x="-26" y="-78">SPEC</text><text class="s" x="-26" y="-64">the only LLM call</text></g>
+          <g class="stn" transform="translate(406,470)"><path class="face-top" d="M0 -40 L40 -60 L80 -40 L40 -20Z" transform="translate(-40,0)"/><path class="face-l" d="M-40 -40 L0 -20 L0 10 L-40 -10Z"/><path class="face-r" d="M40 -40 L0 -20 L0 10 L40 -10Z"/><text x="-28" y="-78">SOLVE</text><text class="s" x="-28" y="-64">≤ 12 kernels</text></g>
+          <g class="stn" transform="translate(550,388)"><path class="face-top" d="M0 -40 L40 -60 L80 -40 L40 -20Z" transform="translate(-40,0)"/><path class="face-l" d="M-40 -40 L0 -20 L0 10 L-40 -10Z"/><path class="face-r" d="M40 -40 L0 -20 L0 10 L40 -10Z"/><text x="-30" y="-78">AUDIT</text><text class="s" x="-30" y="-64">dimensions</text></g>
+          <g class="stn" transform="translate(622,430)"><circle r="16" cx="0" cy="-8" fill="#fffdf8" stroke="#101418" stroke-width="1.5"/><text x="-22" y="34">WRITE → DONE</text></g>
+          <circle class="token" r="7" cx="0" cy="0"/>
+          <text x="40" y="78" font-family="ui-monospace,monospace" font-size="12" fill="#4b4237">FIG. 1 PREVIEW · one fact walks the chain</text>
+        </svg>
+        <div class="cap">teal dot = fact F-03 travelling from the drawing to the report<br>dark block = the only stage that spends tokens</div>
+      </div>
+    </section>
+
+    <div class="body">
+      <div class="side">§1 · for readers without an engineering background</div>
+      <div>
+        <h2><small>01 · the problem</small>Why reading and arithmetic break agents</h2>
+        <p>An engineering task hands the agent a drawing, a specification and a question: how much does this beam bend, which cable section carries this load. On the dev set, the two heaviest failure families are not reasoning errors. They are <strong>misread drawing callouts</strong> and <strong>unit errors</strong>.</p>
+        <p>A callout like <code>6000</code> on a structural drawing means millimetres. Read as metres, the bending moment is off by a factor of a million, and the model writes it down calmly. Language models are good at deciding <em>what</em> to compute and poor at small print and units. So we split the job.</p>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="fig">
+      <div class="lbl"><span>Figure 1 · Architecture</span><i>EXTRACT → SPEC → SOLVE → AUDIT → PROVE → WRITE → DONE</i></div>
+      <div class="pane">
+        <svg viewBox="0 0 1120 250" width="100%" role="img" aria-label="Pipeline">
+          <g font-family="Helvetica,Arial,sans-serif">
+            <g><rect x="0" y="40" width="140" height="92" rx="4" fill="#f4efe6"/><text x="16" y="74" font-size="14" font-weight="600" letter-spacing="1.4">EXTRACT</text><text x="16" y="98" class="tick">facts + provenance</text><text x="16" y="116" class="tick">0 tokens</text></g>
+            <g><rect x="166" y="40" width="140" height="92" rx="4" fill="#101418"/><text x="182" y="74" font-size="14" font-weight="600" letter-spacing="1.4" fill="#fffdf8">SPEC</text><text x="182" y="98" class="tick" style="fill:#c9cfd6">LLM writes a typed</text><text x="182" y="116" class="tick" style="fill:#c9cfd6">calculation</text></g>
+            <g><rect x="332" y="40" width="140" height="92" rx="4" fill="#f4efe6"/><text x="348" y="74" font-size="14" font-weight="600" letter-spacing="1.4">SOLVE</text><text x="348" y="98" class="tick">≤ 12 kernels</text><text x="348" y="116" class="tick">pint / scipy</text></g>
+            <g><rect x="498" y="40" width="140" height="92" rx="4" fill="#f4efe6"/><text x="514" y="74" font-size="14" font-weight="600" letter-spacing="1.4">AUDIT</text><text x="514" y="98" class="tick">dimension network</text><text x="514" y="116" class="tick">0 tokens</text></g>
+            <g><rect x="664" y="40" width="140" height="92" rx="4" fill="#f4efe6"/><text x="680" y="74" font-size="14" font-weight="600" letter-spacing="1.4">PROVE</text><text x="680" y="98" class="tick">re-measure CAD</text><text x="680" y="116" class="tick">2nd parser</text></g>
+            <g><rect x="830" y="40" width="140" height="92" rx="4" fill="#f4efe6"/><text x="846" y="74" font-size="14" font-weight="600" letter-spacing="1.4">WRITE</text><text x="846" y="98" class="tick">ledger facts only</text><text x="846" y="116" class="tick">no new numbers</text></g>
+            <g><rect x="996" y="58" width="110" height="56" rx="28" fill="none" stroke="#101418"/><text x="1028" y="91" font-size="14" font-weight="600" letter-spacing="1.4">DONE</text></g>
+            <g stroke="#101418" stroke-width="1.5"><path d="M142 86h20M308 86h20M474 86h20M640 86h20M806 86h20M972 86h20"/></g>
+            <path d="M568 134 C 568 180, 236 180, 236 136" fill="none" stroke="#5b6672" stroke-dasharray="4 5"/>
+            <text x="300" y="188" class="tick">violation → re-emit only the faulty quantity</text>
+            <rect x="0" y="210" width="970" height="30" rx="4" fill="#dcefeb"/>
+            <text x="14" y="230" class="tick" style="fill:#0f766e">LEDGER · F-03 L = 6 000 mm · S-101 p.2 · F-07 w = 12 kN/m · spec §2.3 · K-1 M = 54.0 kN·m · beam-simple</text>
+          </g>
+        </svg>
+        <figcaption><b>Figure 1.</b> Only SPEC spends tokens. Everything the report says must point to the teal ledger. A done or error frame is guaranteed; forced finalisation at T-12 min.</figcaption>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="side">
+        <span class="pv"><b>F-03</b> S-101 p.2 · bbox 412,188</span>
+        <span class="pv"><b>F-07</b> spec §2.3</span>
+        <span class="pv"><b>K-1</b> beam-simple v0.3</span>
+        <br>§3 · Engineering reasoning
+      </div>
+      <div>
+        <h2><small>02 · one number, end to end</small>A beam, four lines, every source</h2>
+        <p>Simply supported beam under uniform load: the same four lines a licensed engineer writes by hand, each one traceable.</p>
+        <table class="ledger">
+          <thead><tr><th>id</th><th>quantity</th><th>value</th><th>audit</th></tr></thead>
+          <tbody>
+            <tr><td>F-03</td><td>span L</td><td class="v">6 000 mm</td><td>length ✓</td></tr>
+            <tr><td>F-07</td><td>load w</td><td class="v">12 kN/m</td><td>force / length ✓</td></tr>
+            <tr><td>K-1</td><td>M<sub>max</sub> = wL²/8</td><td class="v">54.0 kN·m</td><td>torque ✓ · range ✓</td></tr>
+            <tr class="err"><td>—</td><td>LLM alone</td><td class="v">54 000 000 kN·m</td><td>range ✗ (read 6000 as m)</td></tr>
+            <tr><td>K-2</td><td>deflection δ</td><td>—</td><td><span class="unk">UNKNOWN · E·I missing</span></td></tr>
+          </tbody>
+        </table>
+        <p>UNKNOWN never blocks: the harness publishes what it can prove and names what it cannot.</p>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="fig">
+      <div class="two">
+        <div>
+          <div class="lbl"><span>Figure 2 · Score vs cost</span><i>29 dev tasks</i></div>
+          <div class="pane">
+            <svg viewBox="0 0 640 330" width="100%" style="display:block;max-width:760px" role="img" aria-label="Score versus tokens per task">
+              <g class="grid"><path d="M50 215H620M50 150H620M50 85H620M50 20H620"/></g>
+              <path class="ax" d="M50 20V280H620"/>
+              <g class="tick" text-anchor="end"><text x="42" y="284">0</text><text x="42" y="219">0.1</text><text x="42" y="154">0.2</text><text x="42" y="89">0.3</text><text x="42" y="24">0.4</text></g>
+              <g class="tick" text-anchor="middle"><text x="212.9" y="300">20 k</text><text x="375.7" y="300">40 k</text><text x="538.6" y="300">60 k tokens / task</text></g>
+              <path d="M50 190.3H620" stroke="#5b6672" stroke-dasharray="3 5"/><text x="618" y="184" class="tick" text-anchor="end">0.138 Pareto entry</text>
+              <polyline points="147.7,124 196.6,91.5 245.4,78.5 343.1,72 440.9,72" fill="none" stroke="#0f766e" stroke-width="2"/>
+              <circle cx="245.4" cy="78.5" r="7" fill="#0f766e"/>
+              <g fill="#fffdf8" stroke="#101418" stroke-width="1.5"><circle cx="237.3" cy="117.5" r="5"/><circle cx="302.4" cy="137" r="5"/><circle cx="359.4" cy="169.5" r="5"/><circle cx="269.9" cy="143.5" r="5"/></g>
+              <circle cx="555" cy="208.5" r="6" fill="#b91c1c"/>
+              <g class="lab"><text x="256" y="66">full harness 0.31</text><text x="226" y="112" text-anchor="end">audit off</text><text x="312" y="134">ledger off</text><text x="368" y="160">kernels off</text><text x="280" y="158">gemma</text><text x="545" y="232" text-anchor="end" fill="#b91c1c">LLM alone 0.11</text></g>
+              <text x="452" y="64" class="tick">plateau</text>
+            </svg>
+            <figcaption><b>Figure 2.</b> Up-left is better. The plateau after 24 k tokens: the remaining cost is CPU. <b>Demo values.</b></figcaption>
+          </div>
+        </div>
+        <div>
+          <div class="lbl"><span>Figure 3 · Dev-set failures</span><i>before → after</i></div>
+          <div class="pane">
+            <div class="spec">
+              <div class="sp"><div class="orb"><s>7</s><b>2</b></div><div class="n">callout mistyped</div><div class="w">ledger</div></div>
+              <div class="sp"><div class="orb"><s>4</s><b>1</b></div><div class="n">wrong scale</div><div class="w">audit</div></div>
+              <div class="sp"><div class="orb"><s>6</s><b>1</b></div><div class="n">inconsistent dimension</div><div class="w">audit</div></div>
+              <div class="sp"><div class="orb"><s>3</s><b>2</b></div><div class="n">invalid solid</div><div class="w">prove</div></div>
+              <div class="sp"><div class="orb zero"><s>3</s><b>0</b></div><div class="n">missing deliverable</div><div class="w">write</div></div>
+              <div class="sp"><div class="orb"><s>2</s><b>1</b></div><div class="n">timeout</div><div class="w">done guard</div></div>
+            </div>
+            <figcaption style="margin-top:26px"><b>Figure 3.</b> Each specimen is one failure family: small grey = LLM alone, large = left with the full harness, label = the brick that removed them. 25 → 7. <b>Demo counts.</b></figcaption>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="side">§4 · Cross-model<br><br>§5 · Limits</div>
+      <div>
+        <h2><small>03 · generalizability</small>Two models, same chain</h2>
+        <table class="cmp">
+          <thead><tr><th>model</th><th>LLM alone</th><th>harness</th><th>tokens / task</th></tr></thead>
+          <tbody><tr><td><b>claude-opus-5-5</b></td><td>0.11</td><td>0.31</td><td>24 k</td></tr><tr><td>gemma-4-26b (local)</td><td>0.06</td><td>0.21</td><td>27 k</td></tr></tbody>
+        </table>
+        <h2><small>04 · limits</small>Where it still fails</h2>
+        <ul>
+          <li><strong>Twelve kernels, not more.</strong> Other tasks take the generic sympy/pint path, slower and lower-scoring.</li>
+          <li><strong>No paid code tables.</strong> Normative values come from the task's own tables or are recomputed, source cited.</li>
+          <li><strong>Raster drawings</strong> depend on OCR confidence; the verbatim text always travels with the ledger.</li>
+          <li><strong>Replicating public verify scripts</strong> was dropped: it reads as hard-coded output.</li>
+        </ul>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="foot"><span>Apache-2.0 · reproduce: uv run python eval/run.py</span><span>Planche 02 / 03 · direction « Maquette &amp; fenêtre » · V1 2026-11-18</span></div>
+  </div>
+</div>
+</body>
+</html>

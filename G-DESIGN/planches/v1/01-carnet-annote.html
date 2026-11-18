@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>01 · Carnet annoté — PLE Ledger Kernels Writeup</title>
+<style>
+  :root{
+    --paper:#f6f4ee; --paper-2:#efece3; --ink:#101418; --grey:#5b6672; --rule:#d9d4c7;
+    --teal:#0f766e; --teal-soft:#e3f1ef; --red:#b91c1c;
+    --serif: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink)}
+  body{font:18px/1.62 var(--serif);-webkit-font-smoothing:antialiased}
+  .sheet{width:1440px;margin:0 auto;padding:40px 40px 120px}
+  .frame{border:3px solid var(--ink);border-radius:28px;background:var(--paper);padding:56px 0 80px;position:relative}
+
+  /* top strip */
+  .strip{display:flex;justify-content:space-between;align-items:center;padding:0 64px 28px;border-bottom:1.5px solid var(--ink);font:13px/1 var(--mono);color:var(--grey)}
+  .strip b{color:var(--ink);font-weight:600}
+  .demo{font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;border:1.5px dashed var(--grey);padding:6px 10px;border-radius:999px;color:var(--grey)}
+
+  /* grid */
+  .row{display:grid;grid-template-columns:230px 700px 250px;gap:0 48px;padding:0 64px;}
+  .margin-l{font:12.5px/1.5 var(--mono);color:var(--grey);padding-top:6px}
+  .margin-r{position:relative;padding-top:6px}
+
+  /* title */
+  h1{font:900 104px/.9 var(--sans);letter-spacing:-.045em;margin:56px 0 30px;grid-column:1 / span 3}
+  h1 .sel{position:relative;display:inline-block;padding:0 .08em}
+  h1 .sel::before{content:"";position:absolute;inset:-6px -4px;border:2px solid var(--teal)}
+  .h{position:absolute;width:11px;height:11px;background:var(--paper);border:2px solid var(--teal)}
+  .h.tl{left:-10px;top:-12px}.h.tr{right:-10px;top:-12px}.h.bl{left:-10px;bottom:-12px}.h.br{right:-10px;bottom:-12px}
+  .dek{font:italic 26px/1.35 var(--serif);color:var(--ink);margin:34px 0 0;max-width:800px}
+
+  /* finding card */
+  .finding{margin:48px 0 8px;border:3px solid var(--ink);border-radius:18px;padding:26px 30px;background:#fff;box-shadow:8px 8px 0 var(--ink);position:relative}
+  .finding .k{font:700 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--grey)}
+  .finding p{font:600 25px/1.38 var(--sans);letter-spacing:-.01em;margin:12px 0 0}
+  .num{font-family:var(--mono);font-weight:600;color:var(--teal);white-space:nowrap}
+  .num sup{font:600 10px/1 var(--mono);color:var(--grey);margin-left:3px;vertical-align:super}
+  .num.bad{color:var(--red)}
+
+  h2{font:900 40px/1 var(--sans);letter-spacing:-.03em;margin:84px 0 18px}
+  h2 .n{font:600 14px/1 var(--mono);color:var(--grey);letter-spacing:0;vertical-align:middle;margin-right:14px;border:1.5px solid var(--ink);border-radius:999px;padding:5px 9px}
+  p{margin:0 0 18px}
+  .lede{font-size:20px}
+
+  /* bubble annotations */
+  .bubble{position:absolute;font:500 14px/1.3 var(--sans);background:#fff;border:2px solid var(--ink);border-radius:14px;padding:8px 12px;max-width:220px}
+  .bubble::after{content:"";position:absolute;left:18px;bottom:-11px;width:16px;height:16px;background:#fff;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(45deg) skew(8deg,8deg)}
+  .bubble.left::after{left:-10px;top:14px;bottom:auto;transform:rotate(135deg)}
+  .scribble{position:absolute;pointer-events:none;overflow:visible}
+  .scribble path{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:url(#rough)}
+
+  /* figure tabs (pill w/ offset shadow) */
+  .tabs{display:flex;gap:14px;margin:6px 0 22px}
+  .pill{font:700 13px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;padding:12px 18px;border:2.5px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);box-shadow:4px 4px 0 var(--ink);cursor:pointer}
+  .pill[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+  .pill:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
+
+  figure{margin:0;border:3px solid var(--ink);border-radius:18px;background:#fff;padding:26px 28px 20px;box-shadow:8px 8px 0 var(--ink)}
+  figcaption{font:14px/1.5 var(--sans);color:var(--grey);margin-top:14px;border-top:1.5px solid var(--rule);padding-top:12px}
+  figcaption b{color:var(--ink)}
+  .fig-wide{grid-column:1 / span 3;margin-top:8px}
+  .panel{display:none}.panel.on{display:block}
+
+  /* ledger table */
+  .ledger{width:100%;border-collapse:collapse;font:14px/1.45 var(--mono);margin:6px 0 22px}
+  .ledger th{font:700 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--grey);text-align:left;border-bottom:2px solid var(--ink);padding:10px 8px}
+  .ledger td{border-bottom:1px solid var(--rule);padding:11px 8px;vertical-align:top}
+  .ledger td.v{color:var(--teal);font-weight:600}
+  .ledger tr.err td.v{color:var(--red);text-decoration:line-through}
+  .tag{display:inline-block;font:600 11px/1 var(--mono);border:1.5px solid currentColor;border-radius:999px;padding:3px 7px}
+  .tag.ok{color:var(--teal)} .tag.ko{color:var(--red)} .tag.unk{color:var(--grey);border-style:dashed}
+
+  .cmp{width:100%;border-collapse:collapse;font:15px/1.4 var(--sans);margin:6px 0 20px}
+  .cmp th{font:700 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--grey);text-align:right;border-bottom:2px solid var(--ink);padding:10px 8px}
+  .cmp th:first-child,.cmp td:first-child{text-align:left}
+  .cmp td{text-align:right;border-bottom:1px solid var(--rule);padding:10px 8px;font-family:var(--mono)}
+  .cmp td:first-child{font-family:var(--sans)}
+  .cmp tr.hi td{font-weight:700}
+
+  .limits li{margin-bottom:10px}
+  .foot{margin-top:90px;padding:28px 64px 0;border-top:1.5px solid var(--ink);display:flex;justify-content:space-between;font:12.5px/1.5 var(--mono);color:var(--grey)}
+
+  /* fig1 sketch */
+  .st rect{fill:#fff;stroke:var(--ink);stroke-width:2.5}
+  .st.llm rect{fill:var(--ink)}
+  .st text{font:800 15px var(--sans);letter-spacing:.04em;fill:var(--ink)}
+  .st.llm text{fill:var(--paper)}
+  .st .sub{font:500 10.5px var(--mono);letter-spacing:0;fill:var(--grey)}
+  .st.llm .sub{fill:#c9cfd6}
+  .arrow{stroke:var(--ink);stroke-width:2.5;fill:none;marker-end:url(#ah)}
+  .ax{stroke:var(--ink);stroke-width:1.5;fill:none}
+  .grid{stroke:var(--rule);stroke-width:1}
+  .tick{font:12px var(--mono);fill:var(--grey)}
+  .lab{font:600 13px var(--sans);fill:var(--ink)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .finding{animation:pop .5s cubic-bezier(.2,1.4,.4,1) both .2s}
+    @keyframes pop{from{transform:translate(8px,8px);box-shadow:0 0 0 var(--ink)}to{transform:none;box-shadow:8px 8px 0 var(--ink)}}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{font-size:10.5pt;background:#fff}
+    .sheet{width:auto;padding:0}
+    .frame{border:none;padding:0}
+    .row{grid-template-columns:30mm 1fr 0;gap:0 6mm;padding:0}
+    .margin-r,.scribble,.tabs,.bubble{display:none}
+    h1{font-size:44pt}
+    .finding,figure{box-shadow:none;border-width:1.5px;break-inside:avoid}
+    .panel{display:block!important;margin-bottom:8mm}
+    h2{font-size:18pt;margin-top:10mm;break-after:avoid}
+    .demo{border-color:#000;color:#000}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3.2"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#101418"/></marker>
+  </defs>
+</svg>
+
+<div class="sheet"><div class="frame">
+
+  <div class="strip">
+    <span><b>PLE · Agent Harness</b> — Kaggle Writeup, Stage 1</span>
+    <span>repo <b>github.com/GaiaSG94/ple-ledger-kernels</b> · commit <b>········································</b> (SHA 40 car., au commit final)</span>
+    <span class="demo">Chiffres = démo · à remplacer par eval/run.py</span>
+  </div>
+
+  <div class="row">
+    <h1>The model never<br><span class="sel">reads<i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></span> the drawing.</h1>
+  </div>
+
+  <div class="row">
+    <div class="margin-l">
+      Writeup · 1 870 / 2 000 words<br>
+      Track · Agent Harness<br>
+      Model · claude-opus-5-5<br>
+      Dev set · 29 public tasks
+    </div>
+    <div>
+      <p class="dek">An engineering agent harness in which the LLM only <em>specifies</em>. Typed facts are extracted with provenance, deterministic kernels compute with unit checks, and every number in the deliverable is audited dimension by dimension.</p>
+
+      <div class="finding">
+        <div class="k">Main finding</div>
+        <p>Taking reading and arithmetic away from the model raises the dev-set score from <span class="num bad">0.11</span> to <span class="num">0.31<sup>F2</sup></span> while tokens per task fall from <span class="num bad">62 k</span> to <span class="num">24 k<sup>F2</sup></span>. The cost moves from tokens to CPU.</p>
+      </div>
+    </div>
+    <div class="margin-r">
+      <div class="bubble" style="left:6px;top:70px">every teal number links to a fact or a kernel run</div>
+      <svg class="scribble" style="left:-40px;top:150px" width="120" height="120"><path d="M100 6 C 70 30, 40 50, 12 96 M12 96 l 4 -18 M12 96 l 17 -6"/></svg>
+    </div>
+  </div>
+
+  <!-- 1 -->
+  <div class="row">
+    <div class="margin-l" style="padding-top:96px">§1 · for readers without an engineering background</div>
+    <div>
+      <h2><span class="n">01</span>Why reading and arithmetic break agents</h2>
+      <p class="lede">An engineering task hands the agent a drawing, a specification and a question: <em>how much does this beam bend, which cable section carries this load</em>. On the dev set, the two heaviest failure families are not reasoning errors. They are <strong>misread drawing callouts</strong> and <strong>unit errors</strong>.</p>
+      <p>A callout like <code>6000</code> on a structural drawing means millimetres. Read as metres, the bending moment is off by a factor of a million, and the model writes it down with full confidence. Language models are good at deciding <em>what</em> to compute and poor at reading small print and carrying units through arithmetic. So we split the job.</p>
+    </div>
+    <div class="margin-r">
+      <div class="bubble" style="left:6px;top:200px">6000 → mm, not m.<br>×10⁶ error, written calmly.</div>
+    </div>
+  </div>
+
+  <!-- 2 Fig 1 -->
+  <div class="row">
+    <div class="margin-l" style="padding-top:96px">§2 · Figure 1</div>
+    <div>
+      <h2><span class="n">02</span>The chain: the LLM lives in one box</h2>
+      <p>Each stage passes typed objects to the next. Only <strong>SPEC</strong> calls the model; every other stage is deterministic code that costs zero tokens.</p>
+    </div>
+    <div></div>
+  </div>
+  <div class="row">
+    <div class="fig-wide">
+      <div class="tabs" role="tablist">
+        <button class="pill" role="tab" aria-selected="true" data-p="f1">Fig. 1 · Architecture</button>
+        <button class="pill" role="tab" aria-selected="false" data-p="f2">Fig. 2 · Score vs cost</button>
+        <button class="pill" role="tab" aria-selected="false" data-p="f3">Fig. 3 · Dev-set failures</button>
+      </div>
+
+      <figure class="panel on" id="f1">
+        <svg viewBox="0 0 1180 330" width="100%" role="img" aria-label="Pipeline: task, EXTRACT, SPEC, SOLVE, AUDIT, PROVE, WRITE, DONE">
+          <g font-family="ui-monospace,monospace">
+            <text x="20" y="40" class="tick">task: drawing.pdf + spec.txt + question</text>
+          </g>
+          <g class="st" transform="translate(20,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">EXTRACT</text><text x="16" y="62" class="sub">facts + provenance</text><text x="16" y="80" class="sub">0 tokens</text></g>
+          <g class="st llm" transform="translate(190,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">SPEC</text><text x="16" y="62" class="sub">LLM writes a typed</text><text x="16" y="80" class="sub">calculation</text></g>
+          <g class="st" transform="translate(360,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">SOLVE</text><text x="16" y="62" class="sub">≤ 12 kernels</text><text x="16" y="80" class="sub">pint / scipy</text></g>
+          <g class="st" transform="translate(530,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">AUDIT</text><text x="16" y="62" class="sub">dimension network</text><text x="16" y="80" class="sub">0 tokens</text></g>
+          <g class="st" transform="translate(700,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">PROVE</text><text x="16" y="62" class="sub">re-measure CAD</text><text x="16" y="80" class="sub">2nd parser</text></g>
+          <g class="st" transform="translate(870,90)"><rect width="140" height="96" rx="14"/><text x="16" y="38">WRITE</text><text x="16" y="62" class="sub">ledger facts only</text><text x="16" y="80" class="sub">no new numbers</text></g>
+          <g class="st" transform="translate(1040,106)"><rect width="110" height="64" rx="32"/><text x="30" y="38">DONE</text></g>
+          <path class="arrow" d="M160 138H186"/><path class="arrow" d="M330 138H356"/><path class="arrow" d="M500 138H526"/><path class="arrow" d="M670 138H696"/><path class="arrow" d="M840 138H866"/><path class="arrow" d="M1010 138H1036"/>
+          <!-- repair loop -->
+          <path class="arrow" d="M600 190 C 600 250, 260 250, 260 194" style="stroke-dasharray:6 6"/>
+          <text x="330" y="262" class="tick">violation → re-emit only the faulty quantity</text>
+          <!-- ledger rail -->
+          <rect x="20" y="284" width="990" height="30" rx="8" fill="#e3f1ef" stroke="#0f766e" stroke-width="1.5"/>
+          <text x="34" y="304" class="tick" style="fill:#0f766e">FACT LEDGER · F-03 L = 6 000 mm · S-101 p.2 · F-07 w = 12 kN/m · spec §2.3 · K-1 M = 54.0 kN·m · beam-simple</text>
+          <path d="M90 186V284M940 186V284" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="3 4"/>
+        </svg>
+        <figcaption><b>Figure 1.</b> The model never sees raw pixels of the drawing as a source of numbers and never does arithmetic. Black box = the only token-consuming stage. The teal rail is the ledger every published number must point to. Envelope: done or error frame guaranteed, forced finalisation at T-12 min.</figcaption>
+      </figure>
+
+      <figure class="panel" id="f2">
+        <svg viewBox="0 0 1100 360" width="100%" role="img" aria-label="Score versus tokens per task">
+          <g transform="translate(40,10)">
+            <g class="grid"><path d="M50 215H620M50 150H620M50 85H620M50 20H620"/></g>
+            <path class="ax" d="M50 20V280H620"/>
+            <g class="tick" text-anchor="end"><text x="42" y="284">0</text><text x="42" y="219">0.1</text><text x="42" y="154">0.2</text><text x="42" y="89">0.3</text><text x="42" y="24">0.4</text></g>
+            <g class="tick" text-anchor="middle"><text x="50" y="300">0</text><text x="212.9" y="300">20 k</text><text x="375.7" y="300">40 k</text><text x="538.6" y="300">60 k</text></g>
+            <text x="335" y="330" class="lab" text-anchor="middle">tokens per task (mean, 29 dev tasks)</text>
+            <text x="-150" y="8" class="lab" transform="rotate(-90)" text-anchor="middle">dev-set score</text>
+            <path d="M50 190.3H620" stroke="#5b6672" stroke-dasharray="4 5"/><text x="618" y="184" class="tick" text-anchor="end">Pareto entry 0.138 (Stage 2)</text>
+            <polyline points="147.7,124 196.6,91.5 245.4,78.5 343.1,72 440.9,72" fill="none" stroke="#0f766e" stroke-width="2.5"/>
+            <g fill="#0f766e"><circle cx="147.7" cy="124" r="3.5"/><circle cx="196.6" cy="91.5" r="3.5"/><circle cx="343.1" cy="72" r="3.5"/><circle cx="440.9" cy="72" r="3.5"/></g>
+            <circle cx="245.4" cy="78.5" r="8" fill="#0f766e" stroke="#101418" stroke-width="2"/>
+            <g fill="#fff" stroke="#101418" stroke-width="2"><circle cx="237.3" cy="117.5" r="6"/><circle cx="302.4" cy="137" r="6"/><circle cx="359.4" cy="169.5" r="6"/><circle cx="269.9" cy="143.5" r="6"/></g>
+            <circle cx="555" cy="208.5" r="7" fill="#b91c1c"/>
+            <g class="lab"><text x="256" y="64">full harness 0.31</text><text x="228" y="122" text-anchor="end">audit off</text><text x="312" y="134">ledger off</text><text x="368" y="160">kernels off</text><text x="279" y="158">gemma-4-26b</text><text x="545" y="230" text-anchor="end" fill="#b91c1c">LLM alone 0.11</text></g>
+            <text x="452" y="66" class="tick">plateau</text>
+          </g>
+          <g transform="translate(720,40)" font-family="Helvetica,Arial,sans-serif">
+            <text class="lab" y="0">Reading the plot</text>
+            <text class="tick" y="28">teal line · full harness at 5 token budgets</text>
+            <text class="tick" y="50">open dots · one brick removed (ablation)</text>
+            <text class="tick" y="72">red dot · model answers directly</text>
+            <text class="tick" y="106">up-left is better: higher score, fewer tokens.</text>
+            <text class="tick" y="128">The plateau after 24 k shows the remaining</text>
+            <text class="tick" y="150">cost is CPU in the kernels, not tokens.</text>
+          </g>
+        </svg>
+        <figcaption><b>Figure 2.</b> Score vs cost on the 29 public dev tasks. Each ablation switches off one brick. <b>Values shown are demo placeholders</b>, regenerated by FrontierKit-lite from the run journal.</figcaption>
+      </figure>
+
+      <figure class="panel" id="f3">
+        <svg viewBox="0 0 1100 330" width="100%" role="img" aria-label="Dev-set failures by category, before and after">
+          <g transform="translate(0,20)" font-family="Helvetica,Arial,sans-serif">
+            <g class="tick" text-anchor="end">
+              <text x="250" y="26">callout mistyped</text><text x="250" y="70">wrong scale (mm ↔ m)</text><text x="250" y="114">inconsistent dimension</text><text x="250" y="158">invalid solid</text><text x="250" y="202">missing deliverable</text><text x="250" y="246">timeout</text>
+            </g>
+            <g fill="none" stroke="#101418" stroke-width="2">
+              <rect x="270" y="10" width="280" height="22" rx="4"/><rect x="270" y="54" width="160" height="22" rx="4"/><rect x="270" y="98" width="240" height="22" rx="4"/><rect x="270" y="142" width="120" height="22" rx="4"/><rect x="270" y="186" width="120" height="22" rx="4"/><rect x="270" y="230" width="80" height="22" rx="4"/>
+            </g>
+            <g fill="#b91c1c"><rect x="270" y="10" width="80" height="22" rx="4"/><rect x="270" y="54" width="40" height="22" rx="4"/><rect x="270" y="98" width="40" height="22" rx="4"/><rect x="270" y="142" width="80" height="22" rx="4"/><rect x="270" y="230" width="40" height="22" rx="4"/></g>
+            <g class="tick"><text x="562" y="26">7 → 2 · ledger</text><text x="442" y="70">4 → 1 · audit</text><text x="522" y="114">6 → 1 · audit</text><text x="402" y="158">3 → 2 · prove</text><text x="402" y="202">3 → 0 · write</text><text x="362" y="246">2 → 1 · done guard</text></g>
+            <text x="270" y="290" class="lab">25 failures → 7 on 29 tasks</text>
+          </g>
+          <g transform="translate(720,40)" font-family="Helvetica,Arial,sans-serif">
+            <text class="lab" y="0">Reading the plot</text>
+            <text class="tick" y="28">outline · failures with the LLM alone</text>
+            <text class="tick" y="50">red fill · failures left with the full harness</text>
+            <text class="tick" y="72">label · the brick that removed them</text>
+            <text class="tick" y="106">"invalid solid" barely moves: the 2nd parser</text>
+            <text class="tick" y="128">catches bad geometry but cannot repair it.</text>
+          </g>
+        </svg>
+        <figcaption><b>Figure 3.</b> Dev-set failures by category, before / after the harness. Taxonomy from IDEE.md; <b>counts are demo placeholders</b> pending the S2 measurement campaign.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <!-- 3 ledger -->
+  <div class="row">
+    <div class="margin-l" style="padding-top:96px">§3 · Engineering reasoning<br><br>a licensed engineer does exactly these four lines by hand</div>
+    <div>
+      <h2><span class="n">03</span>One number, end to end</h2>
+      <p>Simply supported beam, uniform load. Here is what the deliverable actually contains, and where each value comes from.</p>
+      <table class="ledger">
+        <thead><tr><th>id</th><th>quantity</th><th>value</th><th>source</th><th>audit</th></tr></thead>
+        <tbody>
+          <tr><td>F-03</td><td>span L</td><td class="v">6 000 mm</td><td>S-101 p.2 · bbox 412,188</td><td><span class="tag ok">length ✓</span></td></tr>
+          <tr><td>F-07</td><td>load w</td><td class="v">12 kN/m</td><td>spec §2.3</td><td><span class="tag ok">force/length ✓</span></td></tr>
+          <tr><td>K-1</td><td>M<sub>max</sub> = wL²/8</td><td class="v">54.0 kN·m</td><td>beam-simple</td><td><span class="tag ok">torque ✓ · range ✓</span></td></tr>
+          <tr class="err"><td>—</td><td>LLM alone</td><td class="v">54 000 000 kN·m</td><td>read 6000 as m</td><td><span class="tag ko">range ✗</span></td></tr>
+          <tr><td>K-2</td><td>deflection δ</td><td class="v">—</td><td>needs E·I, not on drawing</td><td><span class="tag unk">UNKNOWN</span></td></tr>
+        </tbody>
+      </table>
+      <p>UNKNOWN never blocks: the harness publishes what it can prove and names what it cannot.</p>
+    </div>
+    <div class="margin-r">
+      <div class="bubble" style="left:6px;top:330px">caught by the range check, not by the model</div>
+      <div class="bubble" style="left:6px;top:420px;border-style:dashed">dashed = not proven yet</div>
+    </div>
+  </div>
+
+  <!-- 4 cross model -->
+  <div class="row">
+    <div class="margin-l" style="padding-top:96px">§4 · Cross-model generalizability</div>
+    <div>
+      <h2><span class="n">04</span>Two models, same chain</h2>
+      <p>Because the model only writes a short typed spec, a smaller open-weight model loses less than it would answering directly.</p>
+      <table class="cmp">
+        <thead><tr><th>model</th><th>LLM alone</th><th>full harness</th><th>tokens / task</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td>claude-opus-5-5</td><td>0.11</td><td>0.31</td><td>24 k</td></tr>
+          <tr><td>gemma-4-26b (local)</td><td>0.06</td><td>0.21</td><td>27 k</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div></div>
+  </div>
+
+  <!-- 5 limits -->
+  <div class="row">
+    <div class="margin-l" style="padding-top:96px">§5 · Limits &amp; ideas that failed</div>
+    <div>
+      <h2><span class="n">05</span>Where it still fails</h2>
+      <ul class="limits">
+        <li><strong>Twelve kernels, not more.</strong> Tasks outside them take the generic sympy/pint path, which is slower and scores lower.</li>
+        <li><strong>Paid code tables are out of scope.</strong> Normative values come from tables shipped with the task or are recomputed, source cited.</li>
+        <li><strong>Raster drawings</strong> depend on OCR confidence; the verbatim text is always given to the model alongside the ledger.</li>
+        <li><strong>Replicating public verify scripts</strong> was dropped: it reads as hard-coded output.</li>
+      </ul>
+    </div>
+    <div></div>
+  </div>
+
+  <div class="foot">
+    <span>Apache-2.0 · reproduce: <b>uv run python eval/run.py</b></span>
+    <span>Planche 01 / 03 · direction « Carnet annoté » · V1 2026-11-18</span>
+  </div>
+
+</div></div>
+
+<script>
+  document.querySelectorAll('.pill').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.pill').forEach(x=>x.setAttribute('aria-selected',x===b));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));
+  }));
+</script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>03 · Run de jeu — PLE Ledger Kernels Writeup</title>
+<style>
+  :root{
+    --night:#0c1013; --night-2:#141a1f; --night-3:#1d252c; --line:#2a333b;
+    --text:#e8ecef; --dim:#8b96a1; --paper:#f4f2ec; --ink:#101418;
+    --teal:#34c7b1; --teal-ink:#0f766e; --red:#f26363; --red-ink:#b91c1c;
+    --serif: Charter, "Bitstream Charter", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--night);color:var(--text)}
+  body{font:18px/1.65 var(--serif)}
+  .wrap{width:1440px;margin:0 auto;padding:0 0 160px}
+
+  /* HUD */
+  .hud{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:0 36px;align-items:center;padding:16px 64px;background:rgba(12,16,19,.94);border-bottom:1px solid var(--line);font:12.5px/1 var(--mono);color:var(--dim)}
+  .hud b{color:var(--text);font-weight:500}
+  .hud .v{color:var(--teal);font-weight:600}
+  .hud .demo{border:1px dashed var(--dim);border-radius:3px;padding:6px 9px;text-transform:uppercase;letter-spacing:.08em;font-size:10.5px}
+
+  /* level track */
+  .track{display:grid;grid-template-columns:repeat(7,1fr);margin:0 64px;border-bottom:1px solid var(--line)}
+  .lv{padding:14px 0 14px;font:11px/1.3 var(--mono);color:var(--dim);border-right:1px solid var(--line);padding-left:14px;position:relative}
+  .lv:first-child{padding-left:0}
+  .lv b{display:block;font:600 13px/1.2 var(--sans);letter-spacing:.12em;color:var(--text);margin-top:4px}
+  .lv.llm b{color:var(--ink);background:var(--paper);display:block;width:max-content;padding:2px 6px;margin-left:-6px}
+  .lv::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--teal);transform-origin:left;transform:scaleX(0)}
+  .lv.on::after{transform:none}
+
+  /* opening: one lit screen in the dark */
+  .stage{position:relative;padding:110px 64px 40px;display:grid;grid-template-columns:640px 1fr;gap:64px;align-items:end}
+  .kicker{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--teal)}
+  h1{font:800 92px/.92 var(--sans);letter-spacing:-.045em;margin:22px 0 0;color:var(--text)}
+  h1 .dim{color:var(--dim)}
+  .dek{font:20px/1.5 var(--serif);color:#c3cad1;margin:30px 0 0;max-width:560px}
+
+  .screen{background:var(--paper);color:var(--ink);border-radius:10px;padding:34px 36px 30px;position:relative;
+    box-shadow:0 0 0 1px #3a444d, 0 0 0 10px var(--night-2), 0 0 0 11px var(--line), 0 30px 120px rgba(52,199,177,.10)}
+  .screen .k{font:600 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:#5b6672;display:flex;justify-content:space-between}
+  .screen p{font:600 26px/1.36 var(--sans);letter-spacing:-.012em;margin:16px 0 0;color:var(--ink)}
+  .num{font-family:var(--mono);font-weight:600;color:var(--teal-ink);white-space:nowrap}
+  .num.bad{color:var(--red-ink)}
+  .screen .score{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:26px;border-top:1px solid #d9d4c7}
+  .screen .score div{padding:16px 0 0;font:11px/1.4 var(--mono);color:#5b6672;letter-spacing:.06em;text-transform:uppercase}
+  .screen .score b{display:block;font:600 34px/1.1 var(--mono);letter-spacing:-.02em;color:var(--ink);text-transform:none;margin-top:6px}
+  .screen .score b.t{color:var(--teal-ink)}
+
+  /* reading column */
+  .level{display:grid;grid-template-columns:200px 680px 1fr;gap:0 56px;padding:0 64px;margin-top:110px}
+  .level .tag{font:12px/1.6 var(--mono);color:var(--dim);padding-top:10px}
+  .level .tag b{display:block;font:700 46px/1 var(--mono);color:var(--night-3);-webkit-text-stroke:1px #4a5560;margin-bottom:10px}
+  h2{font:700 38px/1.08 var(--sans);letter-spacing:-.025em;margin:0 0 22px;color:var(--text)}
+  p{margin:0 0 18px;color:#cdd3d9}
+  strong{color:var(--text)}
+  code{font:15px var(--mono);color:var(--text);background:var(--night-3);padding:1px 6px;border-radius:3px}
+
+  /* figure arena */
+  .arena{margin:48px 64px 0;background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:34px 36px 28px;position:relative}
+  .arena .lbl{display:flex;justify-content:space-between;font:12px/1 var(--mono);color:var(--dim);letter-spacing:.06em;margin-bottom:18px}
+  .arena .lbl b{color:var(--text);font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+  figcaption{font:14px/1.55 var(--sans);color:var(--dim);border-top:1px solid var(--line);padding-top:14px;margin-top:16px}
+  figcaption b{color:var(--text)}
+  .panel{display:none}.panel.on{display:block}
+  .tick{font:12px var(--mono);fill:#8b96a1}.lab{font:500 13px var(--sans);fill:#e8ecef}
+  .gr{stroke:#222b32}.ax{stroke:#56616b;fill:none}
+
+  /* floating tab bar */
+  .dock{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:6;display:flex;gap:4px;padding:6px;background:#0a0d10;border:1px solid #333d46;border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.5)}
+  .dock .brand{font:700 13px/1 var(--mono);color:var(--text);padding:12px 14px;border-right:1px solid var(--line);margin-right:4px}
+  .dock button{font:600 12px/1 var(--sans);letter-spacing:.06em;color:var(--dim);background:none;border:1px solid transparent;border-radius:8px;padding:12px 14px;cursor:pointer}
+  .dock button[aria-selected="true"]{color:var(--night);background:var(--teal)}
+  .dock button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+  /* ledger */
+  .ledger{width:100%;border-collapse:collapse;font:14px/1.45 var(--mono)}
+  .ledger th{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-align:left;border-bottom:1px solid #56616b;padding:10px 8px}
+  .ledger td{border-bottom:1px solid var(--line);padding:12px 8px;color:#cdd3d9}
+  .ledger td.v{color:var(--teal);font-weight:600}
+  .ledger tr.err td{color:var(--red)} .ledger tr.err td.v{text-decoration:line-through}
+  .unk{border:1.5px dashed var(--dim);color:var(--dim);border-radius:4px;padding:2px 8px;font-size:12px}
+  .ok{color:var(--teal)}
+
+  .cmp{width:100%;border-collapse:collapse;font:15px var(--mono)}
+  .cmp th{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-align:right;border-bottom:1px solid #56616b;padding:10px 8px}
+  .cmp td{text-align:right;padding:12px 8px;border-bottom:1px solid var(--line);color:#cdd3d9}
+  .cmp td:first-child,.cmp th:first-child{text-align:left;font-family:var(--sans)}
+  .cmp td.t{color:var(--teal);font-weight:600}
+  ul{padding-left:20px;color:#cdd3d9} li{margin-bottom:10px}
+
+  .foot{display:flex;justify-content:space-between;margin:110px 64px 0;padding-top:24px;border-top:1px solid var(--line);font:12.5px var(--mono);color:var(--dim)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .lv::after{transition:transform .6s ease}
+    .screen{animation:boot .7s steps(6) both .15s}
+    @keyframes boot{0%{filter:brightness(1.6)}100%{filter:none}}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    :root{--night:#fff;--night-2:#fff;--night-3:#eee;--line:#ccc;--text:#101418;--dim:#5b6672;--teal:#0f766e;--red:#b91c1c}
+    html,body{background:#fff}body{font-size:10.5pt}
+    p,ul,.ledger td,.cmp td{color:#101418}
+    .wrap{width:auto;padding:0}.hud{position:static;padding:0 0 4mm}.dock{display:none}
+    .track{margin:0}.stage{grid-template-columns:1fr;padding:8mm 0;gap:6mm}
+    h1{font-size:40pt}.screen{box-shadow:none;border:1.5px solid #101418}
+    .level{grid-template-columns:24mm 1fr 0;padding:0;gap:0 6mm;margin-top:10mm}
+    .arena{margin:6mm 0;break-inside:avoid}.panel{display:block!important;margin-bottom:6mm}
+    .tick{fill:#5b6672}.lab{fill:#101418}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hud">
+    <b>PLE · Agent Harness</b>
+    <span>repo <b>GaiaSG94/ple-ledger-kernels</b> · commit <b>········</b> <span style="opacity:.7">(SHA 40 car. au commit final)</span></span>
+    <span>score <span class="v">0.31</span></span>
+    <span>tokens/task <span class="v">24 k</span></span>
+    <span class="demo">démo · eval/run.py</span>
+  </div>
+
+  <div class="track" id="track">
+    <div class="lv on">task<b>BRIEF</b></div>
+    <div class="lv">0 tok<b>EXTRACT</b></div>
+    <div class="lv llm">LLM<b>SPEC</b></div>
+    <div class="lv">CPU<b>SOLVE</b></div>
+    <div class="lv">0 tok<b>AUDIT</b></div>
+    <div class="lv">2nd parser<b>PROVE</b></div>
+    <div class="lv">ledger only<b>WRITE · DONE</b></div>
+  </div>
+
+  <section class="stage">
+    <div>
+      <div class="kicker">Kaggle Writeup · Stage 1 · 29 dev tasks</div>
+      <h1>The model never <span class="dim">reads the drawing.</span></h1>
+      <p class="dek">An engineering agent harness in which the LLM only specifies. Typed facts are extracted with provenance, deterministic kernels compute with unit checks, and every number in the deliverable is audited dimension by dimension.</p>
+    </div>
+    <div class="screen">
+      <div class="k"><span>Main finding</span><span>claude-opus-5-5</span></div>
+      <p>Taking reading and arithmetic away from the model raises the dev-set score from <span class="num bad">0.11</span> to <span class="num">0.31</span>, while tokens per task fall from <span class="num bad">62 k</span> to <span class="num">24 k</span>. The cost moves from tokens to CPU.</p>
+      <div class="score">
+        <div>LLM alone<b>0.11</b></div>
+        <div>Full harness<b class="t">0.31</b></div>
+        <div>Failures<b>25 → 7</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="level" data-lv="1">
+    <div class="tag"><b>1-1</b>for readers without an engineering background</div>
+    <div>
+      <h2>Why reading and arithmetic break agents</h2>
+      <p>An engineering task hands the agent a drawing, a specification and a question: how much does this beam bend, which cable section carries this load. On the dev set, the two heaviest failure families are not reasoning errors. They are <strong>misread drawing callouts</strong> and <strong>unit errors</strong>.</p>
+      <p>A callout like <code>6000</code> on a structural drawing means millimetres. Read as metres, the bending moment is off by a factor of a million, and the model writes it down calmly. Language models are good at deciding <em>what</em> to compute and poor at small print and units. So we split the job.</p>
+    </div>
+    <div></div>
+  </section>
+
+  <div class="arena" id="arena" data-lv="3">
+    <div class="panel on" id="f1">
+      <div class="lbl"><b>Figure 1 · Architecture</b><span>only the light block spends tokens</span></div>
+      <svg viewBox="0 0 1240 270" width="100%" role="img" aria-label="Pipeline">
+        <g font-family="Helvetica,Arial,sans-serif">
+          <g stroke="#2a333b" fill="#141a1f">
+            <rect x="0" y="40" width="150" height="100" rx="8"/><rect x="360" y="40" width="150" height="100" rx="8"/><rect x="540" y="40" width="150" height="100" rx="8"/><rect x="720" y="40" width="150" height="100" rx="8"/><rect x="900" y="40" width="150" height="100" rx="8"/>
+          </g>
+          <rect x="180" y="40" width="150" height="100" rx="8" fill="#f4f2ec"/>
+          <g font-size="14" font-weight="700" letter-spacing="1.5" fill="#e8ecef"><text x="16" y="74">EXTRACT</text><text x="376" y="74">SOLVE</text><text x="556" y="74">AUDIT</text><text x="736" y="74">PROVE</text><text x="916" y="74">WRITE</text></g>
+          <text x="196" y="74" font-size="14" font-weight="700" letter-spacing="1.5" fill="#101418">SPEC</text>
+          <g class="tick"><text x="16" y="100">facts + provenance</text><text x="16" y="120">0 tokens</text><text x="376" y="100">≤ 12 kernels</text><text x="376" y="120">CPU</text><text x="556" y="100">dimension network</text><text x="556" y="120">0 tokens</text><text x="736" y="100">re-measure CAD</text><text x="736" y="120">2nd parser</text><text x="916" y="100">ledger facts only</text><text x="916" y="120">no new numbers</text></g>
+          <text x="196" y="100" font-family="ui-monospace,monospace" font-size="12" fill="#5b6672">LLM writes a typed</text><text x="196" y="120" font-family="ui-monospace,monospace" font-size="12" fill="#5b6672">calculation</text>
+          <rect x="1080" y="62" width="130" height="56" rx="28" fill="none" stroke="#34c7b1" stroke-width="1.5"/><text x="1118" y="95" font-size="14" font-weight="700" letter-spacing="1.5" fill="#34c7b1">DONE</text>
+          <g stroke="#56616b" stroke-width="1.5"><path d="M152 90h26M332 90h26M512 90h26M692 90h26M872 90h26M1052 90h26"/></g>
+          <path d="M615 142 C 615 196, 255 196, 255 144" fill="none" stroke="#f26363" stroke-dasharray="4 5"/>
+          <text x="330" y="206" class="tick" style="fill:#f26363">violation → re-emit only the faulty quantity</text>
+          <rect x="0" y="228" width="1050" height="32" rx="6" fill="none" stroke="#34c7b1"/>
+          <text x="14" y="249" font-family="ui-monospace,monospace" font-size="12" fill="#34c7b1">LEDGER · F-03 L = 6 000 mm · S-101 p.2 · F-07 w = 12 kN/m · spec §2.3 · K-1 M = 54.0 kN·m · beam-simple</text>
+        </g>
+      </svg>
+      <figcaption><b>Figure 1.</b> The chain read as levels: one LLM call, five deterministic stages. Every published number points to the teal ledger. A done or error frame is guaranteed; forced finalisation at T-12 min.</figcaption>
+    </div>
+
+    <div class="panel" id="f2">
+      <div class="lbl"><b>Figure 2 · Score vs cost</b><span>29 dev tasks · demo values</span></div>
+      <svg viewBox="0 0 1100 340" width="100%" role="img" aria-label="Score versus tokens per task">
+        <g transform="translate(40,10)">
+          <g class="gr"><path d="M50 215H620M50 150H620M50 85H620M50 20H620"/></g>
+          <path class="ax" d="M50 20V280H620"/>
+          <g class="tick" text-anchor="end"><text x="42" y="284">0</text><text x="42" y="219">0.1</text><text x="42" y="154">0.2</text><text x="42" y="89">0.3</text><text x="42" y="24">0.4</text></g>
+          <g class="tick" text-anchor="middle"><text x="212.9" y="300">20 k</text><text x="375.7" y="300">40 k</text><text x="538.6" y="300">60 k</text><text x="335" y="324">tokens per task</text></g>
+          <path d="M50 190.3H620" stroke="#56616b" stroke-dasharray="3 5"/><text x="618" y="184" class="tick" text-anchor="end">0.138 Pareto entry (Stage 2)</text>
+          <polyline points="147.7,124 196.6,91.5 245.4,78.5 343.1,72 440.9,72" fill="none" stroke="#34c7b1" stroke-width="2"/>
+          <circle cx="245.4" cy="78.5" r="7" fill="#34c7b1"/>
+          <g fill="#0c1013" stroke="#e8ecef" stroke-width="1.5"><circle cx="237.3" cy="117.5" r="5"/><circle cx="302.4" cy="137" r="5"/><circle cx="359.4" cy="169.5" r="5"/><circle cx="269.9" cy="143.5" r="5"/></g>
+          <circle cx="555" cy="208.5" r="6" fill="#f26363"/>
+          <g class="lab"><text x="256" y="66">full harness 0.31</text><text x="226" y="112" text-anchor="end">audit off</text><text x="312" y="134">ledger off</text><text x="368" y="160">kernels off</text><text x="280" y="158">gemma-4-26b</text><text x="545" y="232" text-anchor="end" fill="#f26363">LLM alone 0.11</text></g>
+          <text x="452" y="64" class="tick">plateau</text>
+        </g>
+        <g transform="translate(730,40)"><text class="lab">High score, low cost = up-left.</text><text class="tick" y="28">teal line · full harness at 5 token budgets</text><text class="tick" y="50">open dots · one brick switched off</text><text class="tick" y="72">red · model answers directly</text><text class="tick" y="106">After 24 k the curve is flat: the cost</text><text class="tick" y="128">left is CPU in the kernels.</text></g>
+      </svg>
+      <figcaption><b>Figure 2.</b> Ablations and budget sweep, regenerated by FrontierKit-lite from the run journal. <b>Demo values.</b></figcaption>
+    </div>
+
+    <div class="panel" id="f3">
+      <div class="lbl"><b>Figure 3 · Dev-set failures</b><span>game-over screens, by cause</span></div>
+      <svg viewBox="0 0 1100 320" width="100%" role="img" aria-label="Failures by category before and after">
+        <g transform="translate(0,16)" font-family="Helvetica,Arial,sans-serif">
+          <g class="tick" text-anchor="end"><text x="250" y="26">callout mistyped</text><text x="250" y="70">wrong scale (mm ↔ m)</text><text x="250" y="114">inconsistent dimension</text><text x="250" y="158">invalid solid</text><text x="250" y="202">missing deliverable</text><text x="250" y="246">timeout</text></g>
+          <g fill="none" stroke="#56616b" stroke-width="1.5" stroke-dasharray="3 3"><rect x="270" y="10" width="280" height="22" rx="3"/><rect x="270" y="54" width="160" height="22" rx="3"/><rect x="270" y="98" width="240" height="22" rx="3"/><rect x="270" y="142" width="120" height="22" rx="3"/><rect x="270" y="186" width="120" height="22" rx="3"/><rect x="270" y="230" width="80" height="22" rx="3"/></g>
+          <g fill="#f26363"><rect x="270" y="10" width="80" height="22" rx="3"/><rect x="270" y="54" width="40" height="22" rx="3"/><rect x="270" y="98" width="40" height="22" rx="3"/><rect x="270" y="142" width="80" height="22" rx="3"/><rect x="270" y="230" width="40" height="22" rx="3"/></g>
+          <g class="tick"><text x="562" y="26">7 → 2 · ledger</text><text x="442" y="70">4 → 1 · audit</text><text x="522" y="114">6 → 1 · audit</text><text x="402" y="158">3 → 2 · prove</text><text x="402" y="202" style="fill:#34c7b1">3 → 0 · write</text><text x="362" y="246">2 → 1 · done guard</text></g>
+          <text x="270" y="286" class="lab">25 failures → 7 on 29 tasks</text>
+        </g>
+        <g transform="translate(730,40)"><text class="lab">Reading the plot</text><text class="tick" y="28">dashed · failures with the LLM alone</text><text class="tick" y="50">red · failures left with the harness</text><text class="tick" y="72">label · brick that removed them</text></g>
+      </svg>
+      <figcaption><b>Figure 3.</b> Taxonomy from IDEE.md. <b>Demo counts</b>, pending the S2 measurement campaign.</figcaption>
+    </div>
+  </div>
+
+  <section class="level" data-lv="4">
+    <div class="tag"><b>1-2</b>engineering reasoning</div>
+    <div>
+      <h2>One number, end to end</h2>
+      <p>Simply supported beam under uniform load: the four lines a licensed engineer writes by hand, each one traceable.</p>
+      <table class="ledger">
+        <thead><tr><th>id</th><th>quantity</th><th>value</th><th>source</th><th>audit</th></tr></thead>
+        <tbody>
+          <tr><td>F-03</td><td>span L</td><td class="v">6 000 mm</td><td>S-101 p.2</td><td class="ok">length ✓</td></tr>
+          <tr><td>F-07</td><td>load w</td><td class="v">12 kN/m</td><td>spec §2.3</td><td class="ok">force/length ✓</td></tr>
+          <tr><td>K-1</td><td>M<sub>max</sub> = wL²/8</td><td class="v">54.0 kN·m</td><td>beam-simple</td><td class="ok">torque ✓ range ✓</td></tr>
+          <tr class="err"><td>—</td><td>LLM alone</td><td class="v">54 000 000 kN·m</td><td>6000 read as m</td><td>range ✗</td></tr>
+          <tr><td>K-2</td><td>deflection δ</td><td>—</td><td>E·I not on drawing</td><td><span class="unk">UNKNOWN</span></td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:18px">UNKNOWN never blocks: the harness publishes what it can prove and names what it cannot.</p>
+    </div>
+    <div></div>
+  </section>
+
+  <section class="level" data-lv="6">
+    <div class="tag"><b>1-3</b>cross-model · limits</div>
+    <div>
+      <h2>Two models, same chain</h2>
+      <table class="cmp">
+        <thead><tr><th>model</th><th>LLM alone</th><th>harness</th><th>tokens / task</th></tr></thead>
+        <tbody><tr><td>claude-opus-5-5</td><td>0.11</td><td class="t">0.31</td><td>24 k</td></tr><tr><td>gemma-4-26b (local)</td><td>0.06</td><td class="t">0.21</td><td>27 k</td></tr></tbody>
+      </table>
+      <h2 style="margin-top:64px">Where it still fails</h2>
+      <ul>
+        <li><strong>Twelve kernels, not more.</strong> Other tasks take the generic sympy/pint path, slower and lower-scoring.</li>
+        <li><strong>No paid code tables.</strong> Normative values come from the task's own tables or are recomputed, source cited.</li>
+        <li><strong>Raster drawings</strong> depend on OCR confidence; the verbatim text always travels with the ledger.</li>
+        <li><strong>Replicating public verify scripts</strong> was dropped: it reads as hard-coded output.</li>
+      </ul>
+    </div>
+    <div></div>
+  </section>
+
+  <div class="foot"><span>Apache-2.0 · reproduce: uv run python eval/run.py</span><span>Planche 03 / 03 · direction « Run de jeu » (s'écarte du brief) · V1 2026-11-18</span></div>
+</div>
+
+<nav class="dock" role="tablist" aria-label="Figures">
+  <span class="brand">PLE—LK</span>
+  <button role="tab" aria-selected="true" data-p="f1">Fig. 1 Architecture</button>
+  <button role="tab" aria-selected="false" data-p="f2">Fig. 2 Score vs cost</button>
+  <button role="tab" aria-selected="false" data-p="f3">Fig. 3 Failures</button>
+</nav>
+
+<script>
+  const btns=document.querySelectorAll('.dock button');
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    btns.forEach(x=>x.setAttribute('aria-selected',x===b));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));
+    document.getElementById('arena').scrollIntoView({behavior:'smooth',block:'center'});
+  }));
+  // level track lights up as you read
+  const lvs=[...document.querySelectorAll('.lv')];
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting)return;
+    const n=+e.target.dataset.lv;
+    lvs.forEach((l,i)=>l.classList.toggle('on',i<=n));
+  }),{threshold:.4});
+  document.querySelectorAll('[data-lv]').forEach(s=>io.observe(s));
+</script>
+</body>
+</html>
