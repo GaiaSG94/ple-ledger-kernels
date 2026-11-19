@@ -322,6 +322,474 @@ def cable_size(
     }
 
 
+# ---------------------------------------------------------------------------
+# Structural, thermal and hydraulic kernels.
+#
+# Units are the ones in the argument names: no implicit conversion anywhere.
+# ---------------------------------------------------------------------------
+
+
+def _matmul(a, b):
+    return [
+        [sum(a[i][k] * b[k][j] for k in range(len(b))) for j in range(len(b[0]))]
+        for i in range(len(a))
+    ]
+
+
+def _transpose(a):
+    return [list(row) for row in zip(*a)]
+
+
+def _condense(k_full, f_full, fixed):
+    """Free DOFs and the reduced system, ready for _solve_linear."""
+    free = [d for d in range(len(f_full)) if d not in fixed]
+    if not free:
+        return free, [], []
+    return (
+        free,
+        [[k_full[r][c] for c in free] for r in free],
+        [f_full[r] for r in free],
+    )
+
+
+def _expand(free, solved, size):
+    out = [0.0] * size
+    for dof, value in zip(free, solved):
+        out[dof] = value
+    return out
+
+
+def _solve_structure(a_mat, rhs, free):
+    """Solve the reduced structural system, naming a mechanism as such."""
+    if not free:
+        return []
+    try:
+        return [v.real for v in _solve_linear(a_mat, rhs)]
+    except ValueError as exc:
+        raise ValueError(
+            "unstable structure (singular stiffness): check supports and bracing"
+        ) from exc
+
+
+def truss(nodes, members, supports, loads):
+    """Plane pin-jointed truss by the direct stiffness method, nodal loads only.
+
+    Domain: linear-elastic axial members, frictionless pins, small
+    displacements, static load, no self-weight, no buckling or yielding check.
+    nodes: {id, x_m, y_m}. members: {id, a, b, E_GPa, A_mm2}. supports:
+    {node, ux, uy} booleans. loads: {node, Fx_kN, Fy_kN}. EA in kN because
+    1 GPa * 1 mm2 = 1 kN.
+    """
+    if not nodes or not members or not supports:
+        raise ValueError("truss needs at least one node, member and support")
+    xy, pos = {}, {}
+    for n in nodes:
+        _require(n, ["id", "x_m", "y_m"])
+        xy[n["id"]] = (float(n["x_m"]), float(n["y_m"]))
+        pos[n["id"]] = len(pos)
+    size = 2 * len(nodes)
+    fixed = set()
+    for support in supports:
+        _require(support, ["node"])
+        if support["node"] not in pos:
+            raise ValueError(f"support on unknown node {support['node']}")
+        i = pos[support["node"]]
+        if support.get("ux"):
+            fixed.add(2 * i)
+        if support.get("uy"):
+            fixed.add(2 * i + 1)
+    k_full = [[0.0] * size for _ in range(size)]
+    geometry = {}
+    for m in members:
+        _require(m, ["a", "b", "E_GPa", "A_mm2"])
+        if m["a"] not in xy or m["b"] not in xy:
+            raise ValueError(f"member {m.get('id', '?')}: unknown node")
+        if m["E_GPa"] <= 0 or m["A_mm2"] <= 0:
+            raise ValueError(f"member {m.get('id', '?')}: E and A must be positive")
+        xa, ya = xy[m["a"]]
+        xb, yb = xy[m["b"]]
+        length = math.hypot(xb - xa, yb - ya)
+        if length <= 0:
+            raise ValueError(f"member {m.get('id', '?')}: zero length")
+        c, s = (xb - xa) / length, (yb - ya) / length
+        ea = m["E_GPa"] * m["A_mm2"]
+        block = [
+            [c * c, c * s, -c * c, -c * s],
+            [c * s, s * s, -c * s, -s * s],
+            [-c * c, -c * s, c * c, c * s],
+            [-c * s, -s * s, c * s, s * s],
+        ]
+        dofs = [
+            2 * pos[m["a"]],
+            2 * pos[m["a"]] + 1,
+            2 * pos[m["b"]],
+            2 * pos[m["b"]] + 1,
+        ]
+        for r in range(4):
+            for q in range(4):
+                k_full[dofs[r]][dofs[q]] += (ea / length) * block[r][q]
+        geometry[m.get("id", f"M{len(geometry) + 1}")] = (
+            m["a"],
+            m["b"],
+            c,
+            s,
+            length,
+            ea,
+        )
+    f_full = [0.0] * size
+    for load in loads or []:
+        _require(load, ["node"])
+        if load["node"] not in pos:
+            raise ValueError(f"load on unknown node {load['node']}")
+        i = pos[load["node"]]
+        f_full[2 * i] += float(load.get("Fx_kN", 0.0))
+        f_full[2 * i + 1] += float(load.get("Fy_kN", 0.0))
+    free, a_mat, rhs = _condense(k_full, f_full, fixed)
+    disp = _expand(free, _solve_structure(a_mat, rhs, free), size)
+    forces = {}
+    for mid, (a, b, c, s, length, ea) in geometry.items():
+        ia, ib = 2 * pos[a], 2 * pos[b]
+        stretch = (disp[ib] - disp[ia]) * c + (disp[ib + 1] - disp[ia + 1]) * s
+        forces[mid] = _r(ea * stretch / length)
+    residual = [
+        sum(k_full[d][q] * disp[q] for q in range(size)) - f_full[d]
+        for d in range(size)
+    ]
+    reactions = {}
+    for node_id, i in pos.items():
+        if 2 * i not in fixed and 2 * i + 1 not in fixed:
+            continue
+        reactions[node_id] = {
+            "Rx_kN": _r(residual[2 * i]) if 2 * i in fixed else None,
+            "Ry_kN": _r(residual[2 * i + 1]) if 2 * i + 1 in fixed else None,
+        }
+    rx = sum(v["Rx_kN"] or 0.0 for v in reactions.values()) + sum(
+        float(load.get("Fx_kN", 0.0)) for load in loads or []
+    )
+    ry = sum(v["Ry_kN"] or 0.0 for v in reactions.values()) + sum(
+        float(load.get("Fy_kN", 0.0)) for load in loads or []
+    )
+    return {
+        "displacements_m": {
+            str(node_id): {
+                "ux": _r(disp[2 * i]),
+                "uy": _r(disp[2 * i + 1]),
+            }
+            for node_id, i in pos.items()
+        },
+        "member_forces_kN": forces,
+        "reactions_kN": reactions,
+        "max_axial_kN": _r(max((abs(v) for v in forces.values()), default=0.0)),
+        "max_displacement_m": _r(max((abs(v) for v in disp), default=0.0)),
+        "equilibrium_residual_kN": _r(max(abs(rx), abs(ry))),
+    }
+
+
+def frame_2d(nodes, members, supports, loads):
+    """Plane frame by the direct stiffness method, three DOFs per node.
+
+    Domain: linear-elastic beam-column elements, small displacements, nodal
+    loads only, no distributed loads, no member releases, no second-order
+    effects. nodes: {id, x_m, y_m}. members: {id, a, b, E_GPa, A_mm2, I_mm4}
+    (I bends in the plane). supports: {node, ux, uy, rz} booleans. loads:
+    {node, Fx_kN, Fy_kN, M_kNm}. EI in kN.m2 because E_GPa * I_mm4 is 1e-6.
+    """
+    if not nodes or not members or not supports:
+        raise ValueError("frame needs at least one node, member and support")
+    xy, pos = {}, {}
+    for n in nodes:
+        _require(n, ["id", "x_m", "y_m"])
+        xy[n["id"]] = (float(n["x_m"]), float(n["y_m"]))
+        pos[n["id"]] = len(pos)
+    size = 3 * len(nodes)
+    fixed = set()
+    for support in supports:
+        _require(support, ["node"])
+        if support["node"] not in pos:
+            raise ValueError(f"support on unknown node {support['node']}")
+        i = pos[support["node"]]
+        for k, dof in enumerate(("ux", "uy", "rz")):
+            if support.get(dof):
+                fixed.add(3 * i + k)
+    k_full = [[0.0] * size for _ in range(size)]
+    geometry = {}
+    for m in members:
+        _require(m, ["a", "b", "E_GPa", "A_mm2", "I_mm4"])
+        if m["a"] not in xy or m["b"] not in xy:
+            raise ValueError(f"member {m.get('id', '?')}: unknown node")
+        if m["E_GPa"] <= 0 or m["A_mm2"] <= 0 or m["I_mm4"] <= 0:
+            raise ValueError(
+                f"member {m.get('id', '?')}: E, A and I must be positive"
+            )
+        xa, ya = xy[m["a"]]
+        xb, yb = xy[m["b"]]
+        length = math.hypot(xb - xa, yb - ya)
+        if length <= 0:
+            raise ValueError(f"member {m.get('id', '?')}: zero length")
+        c, s = (xb - xa) / length, (yb - ya) / length
+        ea = m["E_GPa"] * m["A_mm2"]
+        ei = m["E_GPa"] * m["I_mm4"] * 1e-6
+        l2, l3 = length * length, length ** 3
+        kl = [
+            [ea / length, 0.0, 0.0, -ea / length, 0.0, 0.0],
+            [0.0, 12 * ei / l3, 6 * ei / l2, 0.0, -12 * ei / l3, 6 * ei / l2],
+            [0.0, 6 * ei / l2, 4 * ei / length, 0.0, -6 * ei / l2, 2 * ei / length],
+            [-ea / length, 0.0, 0.0, ea / length, 0.0, 0.0],
+            [0.0, -12 * ei / l3, -6 * ei / l2, 0.0, 12 * ei / l3, -6 * ei / l2],
+            [0.0, 6 * ei / l2, 2 * ei / length, 0.0, -6 * ei / l2, 4 * ei / length],
+        ]
+        t = [
+            [c, s, 0.0, 0.0, 0.0, 0.0],
+            [-s, c, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, c, s, 0.0],
+            [0.0, 0.0, 0.0, -s, c, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        ]
+        kg = _matmul(_transpose(t), _matmul(kl, t))
+        dofs = [
+            3 * pos[m["a"]] + k for k in range(3)
+        ] + [3 * pos[m["b"]] + k for k in range(3)]
+        for r in range(6):
+            for q in range(6):
+                k_full[dofs[r]][dofs[q]] += kg[r][q]
+        geometry[m.get("id", f"F{len(geometry) + 1}")] = (m["a"], m["b"], kl, t)
+    f_full = [0.0] * size
+    for load in loads or []:
+        _require(load, ["node"])
+        if load["node"] not in pos:
+            raise ValueError(f"load on unknown node {load['node']}")
+        i = pos[load["node"]]
+        f_full[3 * i] += float(load.get("Fx_kN", 0.0))
+        f_full[3 * i + 1] += float(load.get("Fy_kN", 0.0))
+        f_full[3 * i + 2] += float(load.get("M_kNm", 0.0))
+    free, a_mat, rhs = _condense(k_full, f_full, fixed)
+    disp = _expand(free, _solve_structure(a_mat, rhs, free), size)
+    ends = {}
+    for mid, (a, b, kl, t) in geometry.items():
+        d_global = [
+            disp[3 * pos[a]],
+            disp[3 * pos[a] + 1],
+            disp[3 * pos[a] + 2],
+            disp[3 * pos[b]],
+            disp[3 * pos[b] + 1],
+            disp[3 * pos[b] + 2],
+        ]
+        d_local = [sum(t[i][k] * d_global[k] for k in range(6)) for i in range(6)]
+        f_local = [sum(kl[i][k] * d_local[k] for k in range(6)) for i in range(6)]
+        ends[mid] = {
+            "N_kN": _r(f_local[3]),
+            "Va_kN": _r(f_local[1]),
+            "Vb_kN": _r(f_local[4]),
+            "Ma_kNm": _r(f_local[2]),
+            "Mb_kNm": _r(f_local[5]),
+        }
+    residual = [
+        sum(k_full[d][q] * disp[q] for q in range(size)) - f_full[d]
+        for d in range(size)
+    ]
+    reactions = {}
+    for node_id, i in pos.items():
+        if not (3 * i in fixed or 3 * i + 1 in fixed or 3 * i + 2 in fixed):
+            continue
+        reactions[node_id] = {
+            "Rx_kN": _r(residual[3 * i]) if 3 * i in fixed else None,
+            "Ry_kN": _r(residual[3 * i + 1]) if 3 * i + 1 in fixed else None,
+            "Mz_kNm": _r(residual[3 * i + 2]) if 3 * i + 2 in fixed else None,
+        }
+    fx = fy = mz = 0.0
+    for node_id, i in pos.items():
+        rx = f_full[3 * i] + residual[3 * i]
+        ry = f_full[3 * i + 1] + residual[3 * i + 1]
+        mm = f_full[3 * i + 2] + residual[3 * i + 2]
+        fx += rx
+        fy += ry
+        mz += mm + xy[node_id][0] * ry - xy[node_id][1] * rx
+    return {
+        "displacements": {
+            str(node_id): {
+                "ux_m": _r(disp[3 * i]),
+                "uy_m": _r(disp[3 * i + 1]),
+                "rz_rad": _r(disp[3 * i + 2]),
+            }
+            for node_id, i in pos.items()
+        },
+        "member_end_forces": ends,
+        "reactions": reactions,
+        "max_displacement_m": _r(
+            max((abs(v) for i, v in enumerate(disp) if i % 3 != 2), default=0.0)
+        ),
+        "max_moment_kNm": _r(
+            max(
+                (abs(v) for end in ends.values() for v in (end["Ma_kNm"], end["Mb_kNm"])),
+                default=0.0,
+            )
+        ),
+        "equilibrium_residual_kN": _r(max(abs(fx), abs(fy))),
+        "equilibrium_residual_kNm": _r(abs(mz)),
+    }
+
+
+def buckling_euler(
+    L_m: float,
+    E_GPa: float,
+    I_mm4: float,
+    K: float = 1.0,
+    A_mm2: Optional[float] = None,
+) -> dict:
+    """Euler critical load of a prismatic column.
+
+    Domain: prismatic homogeneous column, linear-elastic, no imperfection, no
+    yielding or local buckling check. K = 1 pinned-pinned, 0.5 fixed-fixed,
+    0.7 fixed-pinned, 2 fixed-free. Pcr = pi^2 E I / (K L)^2; with A given it
+    also returns sigma_cr = Pcr/A.
+    """
+    if L_m <= 0 or E_GPa <= 0 or I_mm4 <= 0:
+        raise ValueError("length, modulus and second moment must be positive")
+    if K <= 0:
+        raise ValueError("K must be positive")
+    if A_mm2 is not None and A_mm2 <= 0:
+        raise ValueError("area must be positive")
+    pcr = math.pi ** 2 * E_GPa * I_mm4 * 1e-6 / (K * L_m) ** 2
+    out = {"Pcr_kN": _r(pcr), "effective_length_m": _r(K * L_m), "K": K}
+    if A_mm2 is not None:
+        out["sigma_cr_MPa"] = _r(pcr * 1000.0 / A_mm2)
+    return out
+
+
+def thermo_balance(
+    m_dot_kg_s: float,
+    cp_kJ_kgK: float,
+    T_in_C: float,
+    T_out_C: Optional[float] = None,
+    Q_supplied_kW: Optional[float] = None,
+    tol_pct: float = 1.0,
+) -> dict:
+    """Steady sensible-heat balance of one stream.
+
+    Domain: single phase, constant cp, no phase change, no reaction, no work,
+    perfect mixing. Q = m_dot * cp * (T_out - T_in). Give T_out to compute the
+    heat, Q_supplied to compute the outlet, or both to get residual_kW and a
+    balanced flag within tol_pct of |Q|.
+    """
+    if m_dot_kg_s <= 0 or cp_kJ_kgK <= 0:
+        raise ValueError("mass flow and cp must be positive")
+    if T_out_C is None and Q_supplied_kW is None:
+        raise ValueError("give T_out_C, Q_supplied_kW, or both")
+    if tol_pct < 0:
+        raise ValueError("tol_pct must be non-negative")
+    out = {}
+    if T_out_C is not None:
+        q = m_dot_kg_s * cp_kJ_kgK * (T_out_C - T_in_C)
+        out.update(Q_kW=_r(q), T_out_C=T_out_C)
+    if Q_supplied_kW is not None:
+        if T_out_C is None:
+            out["T_out_C"] = _r(T_in_C + Q_supplied_kW / (m_dot_kg_s * cp_kJ_kgK))
+            out["Q_kW"] = _r(Q_supplied_kW)
+        else:
+            residual = Q_supplied_kW - out["Q_kW"]
+            allowed = abs(tol_pct) / 100.0 * max(abs(out["Q_kW"]), 1e-9)
+            out["residual_kW"] = _r(residual)
+            out["balanced"] = abs(residual) <= allowed
+    return out
+
+
+def fluid_network(elements, reservoirs=None, injections=None, probe_nodes=None):
+    """Steady incompressible flow in a network of linearized pipe resistances.
+
+    Node 0 is the atmosphere at 0 Pa. elements: {id, a, b, R} with R = dP/Q in
+    Pa.s/m3 (laminar, or a resistance the caller already linearized).
+    reservoirs: {node, pressure_Pa} fixed-pressure nodes. injections:
+    {node, flow_m3_s} added into the network (withdrawals negative).
+
+    Domain: constant properties, linear resistance, no minor losses, no pumps,
+    no compressibility or free surface. Continuity residual is reported per
+    node; Darcy-Weisbach friction is out of scope here.
+    """
+    if not elements:
+        raise ValueError("no elements")
+    for el in elements:
+        _require(el, ["a", "b", "R"])
+    fixed = {0: 0.0}
+    for res in reservoirs or []:
+        _require(res, ["node", "pressure_Pa"])
+        fixed[int(res["node"])] = float(res["pressure_Pa"])
+    nodes = set(fixed)
+    for el in elements:
+        nodes |= {int(el["a"]), int(el["b"])}
+    for inj in injections or []:
+        _require(inj, ["node", "flow_m3_s"])
+        nodes.add(int(inj["node"]))
+    unknown = sorted(n for n in nodes if n not in fixed)
+    index = {n: i for i, n in enumerate(unknown)}
+    size = len(unknown)
+    a_mat = [[0.0] * size for _ in range(size)]
+    rhs = [0.0] * size
+    for inj in injections or []:
+        i = index.get(int(inj["node"]))
+        if i is not None:
+            rhs[i] += float(inj["flow_m3_s"])
+    for el in elements:
+        r = float(el["R"])
+        if r <= 0:
+            raise ValueError(
+                f"element {el.get('id', '?')}: resistance must be positive"
+            )
+        g = 1.0 / r
+        na, nb = int(el["a"]), int(el["b"])
+        ia, ib = index.get(na, -1), index.get(nb, -1)
+        pa, pb = fixed.get(na), fixed.get(nb)
+        if ia >= 0:
+            a_mat[ia][ia] += g
+            if ib >= 0:
+                a_mat[ia][ib] -= g
+            elif pb is not None:
+                rhs[ia] += pb * g
+        if ib >= 0:
+            a_mat[ib][ib] += g
+            if ia >= 0:
+                a_mat[ib][ia] -= g
+            elif pa is not None:
+                rhs[ib] += pa * g
+    if size:
+        try:
+            solved = [v.real for v in _solve_linear(a_mat, rhs)]
+        except ValueError as exc:
+            raise ValueError(
+                "singular network: every node must reach a fixed-pressure node"
+            ) from exc
+    else:
+        solved = []
+    pressures = {str(n): _r(p) for n, p in fixed.items()}
+    for n, i in index.items():
+        pressures[str(n)] = _r(solved[i])
+    probe = [str(p) for p in probe_nodes] if probe_nodes else sorted(pressures)
+    missing = [p for p in probe if p not in pressures]
+    if missing:
+        raise ValueError(f"probe nodes not in network: {missing}")
+    flows = {}
+    net = {n: 0.0 for n in nodes}
+    for el in elements:
+        na, nb = int(el["a"]), int(el["b"])
+        flow = (pressures[str(na)] - pressures[str(nb)]) / float(el["R"])
+        flows[el.get("id", f"P{len(flows) + 1}")] = _r(flow)
+        net[na] -= flow
+        net[nb] += flow
+    for inj in injections or []:
+        net[int(inj["node"])] += float(inj["flow_m3_s"])
+    return {
+        "pressures_Pa": {p: pressures[p] for p in probe},
+        "flows_m3_s": flows,
+        # Reservoirs balance the network by definition; continuity is checked
+        # on the nodes whose pressure is solved for.
+        "continuity_residual_m3_s": _r(
+            max((abs(net[n]) for n in unknown), default=0.0)
+        ),
+        "max_pressure_Pa": _r(max((abs(v) for v in pressures.values()), default=0.0)),
+        "max_flow_m3_s": _r(max((abs(v) for v in flows.values()), default=0.0)),
+    }
+
+
 KERNELS = {
     "beam-udl-max": beam_udl_max,
     "beam-point-mid": beam_point_mid,
@@ -330,6 +798,11 @@ KERNELS = {
     "mna-ac": mna_ac,
     "three-phase": three_phase,
     "cable-size": cable_size,
+    "buckling-euler": buckling_euler,
+    "thermo-balance": thermo_balance,
+    "truss": truss,
+    "frame-2d": frame_2d,
+    "fluid-network": fluid_network,
 }
 
 
@@ -347,6 +820,21 @@ ARG_DIMS = {
         "L": "length",
         "V": "voltage",
         "max_drop_pct": "dimensionless",
+    },
+    "buckling-euler": {
+        "L_m": "length",
+        "E_GPa": "pressure",
+        "I_mm4": "second_moment",
+        "K": "dimensionless",
+        "A_mm2": "area",
+    },
+    "thermo-balance": {
+        "m_dot_kg_s": "mass_flow",
+        "cp_kJ_kgK": "specific_heat",
+        "T_in_C": "temperature",
+        "T_out_C": "temperature",
+        "Q_supplied_kW": "power",
+        "tol_pct": "dimensionless",
     },
 }
 
@@ -367,6 +855,19 @@ RESULT_UNITS = {
     "cable-size": {
         "A_min_mm2": "mm2", "A_selected_mm2": "mm2", "dV_V": "V", "dV_pct": "%",
     },
+    "buckling-euler": {"Pcr_kN": "kN", "sigma_cr_MPa": "MPa"},
+    "thermo-balance": {"Q_kW": "kW", "T_out_C": "C", "residual_kW": "kW"},
+    "truss": {
+        "max_axial_kN": "kN",
+        "max_displacement_m": "m",
+        "equilibrium_residual_kN": "kN",
+    },
+    "frame-2d": {
+        "max_displacement_m": "m",
+        "max_moment_kNm": "kN.m",
+        "equilibrium_residual_kN": "kN",
+    },
+    "fluid-network": {"max_pressure_Pa": "Pa", "max_flow_m3_s": "m3/s"},
 }
 
 
@@ -380,9 +881,15 @@ def contract(kernel: str) -> dict:
     if fn is None:
         raise ValueError(f"unknown kernel: {kernel}")
     dims = ARG_DIMS.get(kernel, {})
+    sig = inspect.signature(fn)
     return {
         "name": kernel,
-        "params": {p: dims.get(p) for p in inspect.signature(fn).parameters},
+        "params": {p: dims.get(p) for p in sig.parameters},
+        "required": [
+            p
+            for p, v in sig.parameters.items()
+            if v.default is inspect.Parameter.empty
+        ],
         "results": dict(RESULT_UNITS.get(kernel, {})),
     }
 

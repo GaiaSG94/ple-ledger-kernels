@@ -18,6 +18,10 @@ DIMS = {
     "mass": (0, 1, 0, 0, 0, 0),
     "time": (0, 0, 1, 0, 0, 0),
     "frequency": (0, 0, -1, 0, 0, 0),
+    "volume_flow": (3, 0, -1, 0, 0, 0),
+    "mass_flow": (0, 1, -1, 0, 0, 0),
+    "flow_resistance": (-4, 1, -1, 0, 0, 0),
+    "specific_heat": (2, 0, -2, 0, -1, 0),
     "current": (0, 0, 0, 1, 0, 0),
     "voltage": (2, 1, -3, -1, 0, 0),
     "power": (2, 1, -3, 0, 0, 0),
@@ -34,10 +38,15 @@ UNIT_TO_DIMS = {
     "N": "force", "kN": "force", "MN": "force", "lbf": "force", "kip": "force",
     "N/m": "force_per_length", "kN/m": "force_per_length", "N/mm": "force_per_length",
     "N.m": "moment", "kN.m": "moment", "kNm": "moment", "lbf.ft": "moment",
-    "Pa": "pressure", "kPa": "pressure", "MPa": "pressure", "psi": "pressure",
+    "Pa": "pressure", "kPa": "pressure", "MPa": "pressure", "GPa": "pressure",
+    "psi": "pressure",
     "kg": "mass", "t": "mass", "g": "mass",
     "s": "time", "min": "time", "h": "time",
     "Hz": "frequency", "kHz": "frequency", "MHz": "frequency",
+    "m3/s": "volume_flow", "L/s": "volume_flow", "m3/h": "volume_flow",
+    "kg/s": "mass_flow", "t/h": "mass_flow",
+    "Pa.s/m3": "flow_resistance", "kPa.s/m3": "flow_resistance",
+    "kJ/kg.K": "specific_heat", "J/kg.K": "specific_heat",
     "A": "current", "kA": "current",
     "V": "voltage", "kV": "voltage", "mV": "voltage",
     "W": "power", "kW": "power", "MW": "power",
@@ -94,6 +103,8 @@ def check_consistency(a: Fact, b: Fact) -> Verdict:
 
 
 def _band_reason(fact: Fact) -> Optional[str]:
+    if fact.value == 0:  # a zero residual or deflection is a result, not a slip
+        return None
     name = UNIT_TO_DIMS.get(fact.unit)
     if not name or name not in PLAUSIBLE:
         return None
