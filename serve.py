@@ -23,9 +23,22 @@ import asyncio
 import json
 import os
 import re
+import sys
 
 import openai
 import taskbridge
+
+# The ledger kernels ship next to this file; the kernel tool reports if they
+# are missing instead of stopping the harness.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+  from harness import kernels
+except ImportError:
+  kernels = None
+
+KERNEL_DOC = "; ".join(
+    f"{k['name']}({', '.join(k['params'])})" for k in kernels.catalog()
+) if kernels else "none"
 
 MODEL = os.environ["MODEL_NAME"]
 # The model's highest reasoning level: max for Claude, GLM, GPT-6 and
@@ -113,6 +126,16 @@ TOOLS = [
         "Create or overwrite a file; parent folders are created.",
         path="string",
         content="string",
+    ),
+    tool(
+        "kernel",
+        "Run a deterministic solver kernel and get its results as JSON. Prefer"
+        " it over hand arithmetic, and quote its outputs in the deliverables."
+        f" Kernels (name(args)): {KERNEL_DOC}."
+        " inputs holds the named arguments as a JSON object; units are in the"
+        " argument names and kernel docs.",
+        kernel="string",
+        inputs="object",
     ),
 ]
 
@@ -206,6 +229,13 @@ async def run_tool(session, fn):
           f"wrote {await session.write_file(args['path'], args['content'])}"
           f" bytes to {args['path']}"
       )
+    if name == "kernel":
+      if kernels is None:
+        return "error: the solver kernels are not available here"
+      inputs = args.get("inputs") or {}
+      if not isinstance(inputs, dict):
+        return "error: inputs must be a JSON object"
+      return clip(json.dumps(kernels.run(args.get("kernel", ""), inputs)))
     return f"error: there is no tool named {name}"
   # ValueError: content with an unpaired surrogate
   except (taskbridge.TaskError, KeyError, ValueError) as exc:
