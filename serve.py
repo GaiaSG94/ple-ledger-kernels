@@ -32,10 +32,12 @@ import taskbridge
 # are missing instead of stopping the harness.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-  from harness import kernels, spec
+  from harness import kernels, prove, spec, write
 except ImportError:
   kernels = None
   spec = None
+  prove = None
+  write = None
 
 KERNEL_DOC = "; ".join(
     f"{k['name']}({', '.join(k['params'])})" for k in kernels.catalog()
@@ -89,7 +91,9 @@ code, not by hand. Write each deliverable exactly where and in the format the ta
 it. When you are done, reply without calling a tool: a short summary of each deliverable, where it is, and the key \
 results. Every number you read from the task goes into the fact ledger with assert_facts (id, kind, value,\
  unit, and where you read it) before you use it. Unit-bearing kernel arguments cite fact ids, never bare numbers.\
- After computing, run audit and fix every VIOLATION before you write the deliverables."""
+ After computing, run audit and fix every VIOLATION before you write the deliverables. Author each deliverable with the\
+ deliverable tool, which substitutes ledger facts into {F1} placeholders: never type a number yourself. Save its text with\
+ write_file, then run verify on the saved text and fix anything it cannot trace."""
 
 
 def tool(name, description, **params):
@@ -164,6 +168,22 @@ TOOLS = [
         "Run the zero-token dimensional audit on the ledger. Returns counts"
         " plus every VIOLATION and UNKNOWN with its reason; fix violations"
         " before writing the deliverables.",
+    ),
+    tool(
+        "deliverable",
+        "Render a markdown deliverable from ledger facts. Write the prose with"
+        " {F1} or {K1.Mmax_kNm} placeholders: each is replaced by its value,"
+        " unit and id, and a Sources table is appended. Never type a number"
+        " directly; save the returned text with write_file.",
+        title="string",
+        sections="array",
+    ),
+    tool(
+        "verify",
+        "Lint text against the ledger: returns every number found plus those"
+        " that no fact or derived result can vouch for. Run it on each saved"
+        " deliverable before you finish.",
+        text="string",
     ),
 ]
 
@@ -271,6 +291,18 @@ async def run_tool(session, fn, book):
       if book is None:
         return "error: the fact ledger is not available here"
       return clip(json.dumps(book.audit(), ensure_ascii=False))
+    if name == "deliverable":
+      if book is None:
+        return "error: the fact ledger is not available here"
+      return clip(write.render(book, args.get("title", ""), args.get("sections"))["text"])
+    if name == "verify":
+      if book is None:
+        return "error: the fact ledger is not available here"
+      return clip(
+          json.dumps(
+              prove.trace(book.ledger, args.get("text", "")), ensure_ascii=False
+          )
+      )
     if name == "kernel":
       if book is None:
         return "error: the solver kernels are not available here"

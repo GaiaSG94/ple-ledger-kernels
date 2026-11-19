@@ -6,6 +6,14 @@ Round: R1
 Maj: 2026-11-17 00:00
 
 ## opencode
+- 2026-11-19 (suite 4) : amorce S5. WRITE (harness/write.py) : rendu markdown a
+  partir de placeholders {F1} / {K1.cle}, tableau Sources automatique, placeholder
+  inconnu = erreur. PROVE (harness/prove.py) : extraction des nombres, tolerance
+  relative 0,5 %, identifiants (F1, K1.x, S-101, 2D), titres markdown et tableau
+  Sources ignores ; sortie = nombres non traçables + contexte. Outils serve
+  `deliverable` et `verify` (9 outils au total), prompt systeme mis a jour.
+  57 tests pytest verts, cablage verifie sur un livrable rendu (traçable) et sur
+  un chiffre invente (118,2 kN.m signale). Reste : campagne 29 dev (dataset + proxy).
 - 2026-11-19 (suite 3) : noyaux S4 ajoutes -> 12 noyaux au catalogue (plafond du PLAN).
   buckling-euler (Pcr + sigma_cr), thermo-balance (Q, T sortie, residu + balanced),
   truss (stiffness directe, forces axiale et reactions), frame-2d (3 ddl/noeud, efforts
