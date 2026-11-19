@@ -333,6 +333,60 @@ KERNELS = {
 }
 
 
+# Dimension each unit-bearing argument must carry; None means structural
+# (string, list or object) and takes a literal.
+ARG_DIMS = {
+    "beam-udl-max": {"L": "length", "w": "force_per_length"},
+    "beam-point-mid": {"L": "length", "P": "force"},
+    "section-props-rect": {"b_mm": "length", "h_mm": "length"},
+    "section-props-circle": {"d_mm": "length"},
+    "mna-ac": {"freq_hz": "frequency"},
+    "three-phase": {"V_LL": "voltage", "P_kW": "power", "pf": "dimensionless"},
+    "cable-size": {
+        "I": "current",
+        "L": "length",
+        "V": "voltage",
+        "max_drop_pct": "dimensionless",
+    },
+}
+
+# Unit of the fact recorded for each numeric output of a kernel.
+RESULT_UNITS = {
+    "beam-udl-max": {"Mmax_kNm": "kN.m", "Vmax_kN": "kN"},
+    "beam-point-mid": {"Mmax_kNm": "kN.m", "Vmax_kN": "kN"},
+    "section-props-rect": {
+        "A_mm2": "mm2", "I_mm4": "mm4", "S_mm3": "mm3", "r_mm": "mm",
+    },
+    "section-props-circle": {
+        "A_mm2": "mm2", "I_mm4": "mm4", "S_mm3": "mm3", "r_mm": "mm",
+    },
+    "three-phase": {
+        "S_kVA": "kVA", "Q_kvar": "kvar", "I_line_A": "A",
+        "I_phase_A": "A", "V_phase_V": "V",
+    },
+    "cable-size": {
+        "A_min_mm2": "mm2", "A_selected_mm2": "mm2", "dV_V": "V", "dV_pct": "%",
+    },
+}
+
+
+def contract(kernel: str) -> dict:
+    """The argument dimensions and result units the spec loop enforces.
+
+    Parameters mapped to None are structural and take literals; every other
+    parameter is a physical quantity and must cite a fact of that dimension.
+    """
+    fn = KERNELS.get(kernel)
+    if fn is None:
+        raise ValueError(f"unknown kernel: {kernel}")
+    dims = ARG_DIMS.get(kernel, {})
+    return {
+        "name": kernel,
+        "params": {p: dims.get(p) for p in inspect.signature(fn).parameters},
+        "results": dict(RESULT_UNITS.get(kernel, {})),
+    }
+
+
 def catalog() -> list:
     """Every kernel with its one-line domain summary and argument names."""
     out = []

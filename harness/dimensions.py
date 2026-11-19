@@ -9,11 +9,15 @@ from harness.facts import Fact
 DIMS = {
     "length": (1, 0, 0, 0, 0, 0),
     "area": (2, 0, 0, 0, 0, 0),
+    "section_modulus": (3, 0, 0, 0, 0, 0),
+    "second_moment": (4, 0, 0, 0, 0, 0),
     "force": (1, 1, -2, 0, 0, 0),
+    "force_per_length": (0, 1, -2, 0, 0, 0),
     "moment": (2, 1, -2, 0, 0, 0),
     "pressure": (-1, 1, -2, 0, 0, 0),
     "mass": (0, 1, 0, 0, 0, 0),
     "time": (0, 0, 1, 0, 0, 0),
+    "frequency": (0, 0, -1, 0, 0, 0),
     "current": (0, 0, 0, 1, 0, 0),
     "voltage": (2, 1, -3, -1, 0, 0),
     "power": (2, 1, -3, 0, 0, 0),
@@ -25,14 +29,20 @@ DIMS = {
 UNIT_TO_DIMS = {
     "m": "length", "mm": "length", "cm": "length", "km": "length", "in": "length", "ft": "length",
     "m2": "area", "mm2": "area",
+    "mm3": "section_modulus", "cm3": "section_modulus",
+    "mm4": "second_moment", "cm4": "second_moment",
     "N": "force", "kN": "force", "MN": "force", "lbf": "force", "kip": "force",
+    "N/m": "force_per_length", "kN/m": "force_per_length", "N/mm": "force_per_length",
     "N.m": "moment", "kN.m": "moment", "kNm": "moment", "lbf.ft": "moment",
     "Pa": "pressure", "kPa": "pressure", "MPa": "pressure", "psi": "pressure",
     "kg": "mass", "t": "mass", "g": "mass",
     "s": "time", "min": "time", "h": "time",
+    "Hz": "frequency", "kHz": "frequency", "MHz": "frequency",
     "A": "current", "kA": "current",
     "V": "voltage", "kV": "voltage", "mV": "voltage",
     "W": "power", "kW": "power", "MW": "power",
+    "VA": "power", "kVA": "power", "MVA": "power",
+    "var": "power", "kvar": "power", "Mvar": "power",
     "J": "energy", "kJ": "energy", "kWh": "energy",
     "C": "temperature", "K": "temperature",
     "-": "dimensionless", "%": "dimensionless",
@@ -83,25 +93,46 @@ def check_consistency(a: Fact, b: Fact) -> Verdict:
     return Verdict(a, "OK", dims=da)
 
 
+def _band_reason(fact: Fact) -> Optional[str]:
+    name = UNIT_TO_DIMS.get(fact.unit)
+    if not name or name not in PLAUSIBLE:
+        return None
+    lo, hi = PLAUSIBLE[name]
+    if lo <= abs(fact.value) <= hi:
+        return None
+    return f"{fact.label or fact.kind}={fact.value} {fact.unit} outside plausible band"
+
+
 def audit(ledger, results=None) -> list[Verdict]:
-    """Audit every fact plus any computed results [(label, value, unit)]."""
-    out = [check_fact(f) for f in ledger.all()]
+    """Audit every fact plus any computed results [(label, value, unit)].
+
+    Facts of the same kind are checked against each other: two facts for the
+    same quantity with different dimensions are a VIOLATION. Facts whose kind
+    starts with 'result:' also get the plausibility band, so a slipped decimal
+    in a kernel output is reported without any extra call.
+    """
     facts = ledger.all()
-    for i in range(len(facts)):
-        for j in range(i + 1, len(facts)):
-            v = check_consistency(facts[i], facts[j])
-            if v.state == "VIOLATION":
-                out.append(v)
+    out = [check_fact(f) for f in facts]
+    for fact, verdict in zip(facts, out):
+        if verdict.state == "OK" and fact.kind.startswith("result:"):
+            reason = _band_reason(fact)
+            if reason:
+                verdict.state, verdict.reason = "UNKNOWN", reason
+    groups = {}
+    for fact in facts:
+        groups.setdefault(fact.kind, []).append(fact)
+    for group in groups.values():
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                v = check_consistency(group[i], group[j])
+                if v.state == "VIOLATION":
+                    out.append(v)
     if results:
-        class _Res:
-            pass
         for label, value, unit in results:
             f = Fact(fid=f"result:{label}", kind="result", value=value, unit=unit, source="computation")
             v = check_fact(f)
-            name = UNIT_TO_DIMS.get(unit)
-            if name and name in PLAUSIBLE:
-                lo, hi = PLAUSIBLE[name]
-                if not (lo <= abs(value) <= hi):
-                    v = Verdict(f, "UNKNOWN", f"{label}={value} {unit} outside plausible band")
+            reason = _band_reason(f)
+            if reason:
+                v = Verdict(f, "UNKNOWN", reason)
             out.append(v)
     return out

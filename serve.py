@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A minimal harness: one model, three tools, one loop.
+"""A minimal harness: a fact ledger, solver kernels and one loop.
 
-The model gets the task and three tools that act in the task container. Each
+The model gets the task and tools that act in the task container. Each
 tool call runs there and its result goes back to the model, until the model
 answers without calling a tool. That answer is the final message.
 """
@@ -32,9 +32,10 @@ import taskbridge
 # are missing instead of stopping the harness.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-  from harness import kernels
+  from harness import kernels, spec
 except ImportError:
   kernels = None
+  spec = None
 
 KERNEL_DOC = "; ".join(
     f"{k['name']}({', '.join(k['params'])})" for k in kernels.catalog()
@@ -86,7 +87,9 @@ SYSTEM = """You are an expert engineer working on a task in a Linux container wi
 act inside it, and bash starts in {workdir}. Read the task and the files it points to before you start. Compute with \
 code, not by hand. Write each deliverable exactly where and in the format the task asks, then open it again to check \
 it. When you are done, reply without calling a tool: a short summary of each deliverable, where it is, and the key \
-results."""
+results. Every number you read from the task goes into the fact ledger with assert_facts (id, kind, value,\
+ unit, and where you read it) before you use it. Unit-bearing kernel arguments cite fact ids, never bare numbers.\
+ After computing, run audit and fix every VIOLATION before you write the deliverables."""
 
 
 def tool(name, description, **params):
@@ -131,11 +134,36 @@ TOOLS = [
         "kernel",
         "Run a deterministic solver kernel and get its results as JSON. Prefer"
         " it over hand arithmetic, and quote its outputs in the deliverables."
+        " Unit-bearing arguments cite fact ids from assert_facts; only"
+        " structural arguments (connection, system, material, elements,"
+        " probe_nodes) take literals."
         f" Kernels (name(args)): {KERNEL_DOC}."
         " inputs holds the named arguments as a JSON object; units are in the"
         " argument names and kernel docs.",
         kernel="string",
         inputs="object",
+    ),
+    tool(
+        "assert_facts",
+        "Record numbers you read from the task (drawings, tables, notes) in the"
+        " typed fact ledger before using them. Each fact is an object with fid"
+        " (unique id you choose, e.g. F1), kind (span, udl, voltage, ...),"
+        " value (number), unit (registry unit: m, mm, kN, kN/m, kN.m, MPa, V,"
+        " A, kW, kVA, ohm, - , ...), source (file and page, table or line where"
+        " you read it) and optional label. The whole array is rejected if one"
+        " fact is invalid.",
+        facts="array",
+    ),
+    tool(
+        "ledger",
+        "List the fact ledger: every fact and derived result with its id,"
+        " value, unit and provenance.",
+    ),
+    tool(
+        "audit",
+        "Run the zero-token dimensional audit on the ledger. Returns counts"
+        " plus every VIOLATION and UNKNOWN with its reason; fix violations"
+        " before writing the deliverables.",
     ),
 ]
 
@@ -190,7 +218,7 @@ def marked(messages):
   return out
 
 
-async def run_tool(session, fn):
+async def run_tool(session, fn, book):
   """Executes a single tool call in the task container and returns its output.
 
   Rewrites `fn["arguments"]` as canonical JSON (or `"{}"` if invalid) so the
@@ -229,13 +257,31 @@ async def run_tool(session, fn):
           f"wrote {await session.write_file(args['path'], args['content'])}"
           f" bytes to {args['path']}"
       )
+    if name == "assert_facts":
+      if book is None:
+        return "error: the fact ledger is not available here"
+      return clip(
+          json.dumps(book.assert_facts(args.get("facts")), ensure_ascii=False)
+      )
+    if name == "ledger":
+      if book is None:
+        return "error: the fact ledger is not available here"
+      return clip(book.context())
+    if name == "audit":
+      if book is None:
+        return "error: the fact ledger is not available here"
+      return clip(json.dumps(book.audit(), ensure_ascii=False))
     if name == "kernel":
-      if kernels is None:
+      if book is None:
         return "error: the solver kernels are not available here"
       inputs = args.get("inputs") or {}
       if not isinstance(inputs, dict):
         return "error: inputs must be a JSON object"
-      return clip(json.dumps(kernels.run(args.get("kernel", ""), inputs)))
+      return clip(
+          json.dumps(
+              book.compute(args.get("kernel", ""), inputs), ensure_ascii=False
+          )
+      )
     return f"error: there is no tool named {name}"
   # ValueError: content with an unpaired surrogate
   except (taskbridge.TaskError, KeyError, ValueError) as exc:
@@ -318,6 +364,7 @@ async def solve(session):
   Returns:
     The final summary message from the model.
   """
+  book = spec.Workspace() if spec else None
   messages = [
       {"role": "system", "content": SYSTEM.format(workdir=session.workdir)},
       {"role": "user", "content": session.instruction},
@@ -389,7 +436,7 @@ async def solve(session):
       await session.log(
           f"{call['function']['name']} {call['function']['arguments'][:200]}"
       )
-      content = await run_tool(session, call["function"])
+      content = await run_tool(session, call["function"], book)
       messages.append(
           {"role": "tool", "tool_call_id": call["id"], "content": content}
       )
