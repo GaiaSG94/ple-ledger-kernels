@@ -2,7 +2,7 @@
 
 Harness entry for the [Physical-Engineering's Last Exam](https://www.kaggle.com/competitions/physical-engineerings-last-exam) competition (Google PLE): an engineering agent harness where **the LLM never reads raw documents and never computes** — it specifies. A typed fact ledger with provenance, a pack of unit-aware deterministic solver kernels, a zero-token dimensional audit, and an independent geometric re-measurement of anything the harness produces.
 
-Status: in progress. The agent loop is the official `minimal` sample (Apache-2.0, Google LLC, vendored from `sample_submissions/minimal`) with one added `kernel` tool; the ledger/kernel architecture replaces it incrementally. Seven deterministic kernels are implemented and tested. Kernel calls are ledger-bound: every unit-bearing argument must cite a fact with provenance, and each numeric output becomes a new auditable fact that later calls can cite. See `../IDEE.md` and `../PLAN.md` in the project folder of our private pipeline for the roadmap.
+Status: in progress. The agent loop is the official `minimal` sample (Apache-2.0, Google LLC, vendored from `sample_submissions/minimal`) with one added `kernel` tool; the ledger/kernel architecture replaces it incrementally. Twelve deterministic kernels are implemented and tested (beams, sections, AC nodal analysis, three-phase, cable sizing, Euler buckling, sensible-heat balance, truss, plane frame, and linearized pipe networks). Kernel calls are ledger-bound: every unit-bearing argument must cite a fact with provenance, and each numeric output becomes a new auditable fact that later calls can cite. See `../IDEE.md` and `../PLAN.md` in the project folder of our private pipeline for the roadmap.
 
 ## Layout
 

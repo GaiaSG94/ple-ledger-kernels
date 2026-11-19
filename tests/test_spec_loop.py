@@ -106,3 +106,59 @@ def test_chain_three_phase_into_cable_sizing():
     assert cable["results"]["dV_pct"] == pytest.approx(3.418, abs=1e-3)
     assert cable["cited"][0] == "K1.I_line_A"
     assert led.audit()["clean"] is True
+
+
+def test_optional_arguments_may_be_omitted():
+    assert "probe_nodes" not in contract("mna-ac")["required"]
+    assert "L" in contract("beam-udl-max")["required"]
+    led = Workspace()
+    led.assert_facts([
+        {"fid": "FQ", "kind": "frequency", "value": 50.0, "unit": "Hz", "source": "nameplate"},
+    ])
+    out = led.compute("mna-ac", {
+        "freq_hz": "FQ",
+        "elements": [
+            {"id": "V1", "type": "V", "value": 10.0, "a": 1, "b": 0},
+            {"id": "R1", "type": "R", "value": 10.0, "a": 1, "b": 0},
+        ],
+    })
+    assert out["results"]["nodes_V"]["1"]["mag"] == pytest.approx(10.0)
+
+
+def test_structural_arguments_can_cite_facts_nested():
+    led = Workspace()
+    led.assert_facts([
+        {"fid": "E1", "kind": "young_modulus", "value": 200.0, "unit": "GPa", "source": "steel datasheet"},
+        {"fid": "A1", "kind": "area", "value": 100.0, "unit": "mm2", "source": "section table"},
+        {"fid": "P1", "kind": "load", "value": 10.0, "unit": "kN", "source": "load case 1"},
+    ])
+    out = led.compute("truss", {
+        "nodes": [
+            {"id": 1, "x_m": 0.0, "y_m": 0.0},
+            {"id": 2, "x_m": 1.0, "y_m": 0.0},
+        ],
+        "members": [
+            {"id": "M1", "a": 1, "b": 2, "E_GPa": {"fact": "E1"}, "A_mm2": {"fact": "A1"}},
+        ],
+        "supports": [
+            {"node": 1, "ux": True, "uy": True},
+            {"node": 2, "uy": True},
+        ],
+        "loads": [{"node": 2, "Fx_kN": {"fact": "P1"}}],
+    })
+    assert set(out["cited"]) == {"E1", "A1", "P1"}
+    assert out["results"]["member_forces_kN"]["M1"] == pytest.approx(10.0)
+    assert out["results"]["displacements_m"]["2"]["ux"] == pytest.approx(5e-4)
+
+
+def test_nested_citation_of_unknown_fact_is_refused():
+    led = Workspace()
+    with pytest.raises(SpecError, match="unknown fact"):
+        led.compute("truss", {
+            "nodes": [{"id": 1, "x_m": 0.0, "y_m": 0.0}],
+            "members": [
+                {"id": "M1", "a": 1, "b": 1, "E_GPa": {"fact": "NOPE"}, "A_mm2": 100.0},
+            ],
+            "supports": [{"node": 1, "ux": True, "uy": True}],
+            "loads": [],
+        })

@@ -6,6 +6,14 @@ Round: R1
 Maj: 2026-11-17 00:00
 
 ## opencode
+- 2026-11-19 (suite 3) : noyaux S4 ajoutes -> 12 noyaux au catalogue (plafond du PLAN).
+  buckling-euler (Pcr + sigma_cr), thermo-balance (Q, T sortie, residu + balanced),
+  truss (stiffness directe, forces axiale et reactions), frame-2d (3 ddl/noeud, efforts
+  d'extremite, equilibre force/moment), fluid-network (mailles a resistance lineaire,
+  injections, residu de continuite hors reservoirs). Tests golden : triangle a 7,5/-12,5 kN,
+  cantilever 45 mm et 30 kN.m, Pcr 2193,25 kN, 501,6 kW, diviseur de pression 150 kPa.
+  Boucle : arguments optionnels enfin facultatifs (mna-ac sans probe_nodes) et donnees
+  structurees citables via {"fact": "F1"} (provenance remontee dans cited). 50 tests.
 - 2026-11-19 (suite) : boucle SPEC->SOLVE->AUDIT branchee (harness/spec.py).
   Workspace : assert_facts (provenance obligatoire, batch tout-ou-rien, ids uniques),
   resolve (tout argument porteur d'unite doit citer un id de fait ; verification de

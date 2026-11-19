@@ -101,6 +101,27 @@ class Workspace:
 
     # -- SOLVE --------------------------------------------------------------
 
+    def _cite(self, value, cited):
+        """Replace {"fact": id} leaves inside structural arguments.
+
+        Nodal data (coordinates, loads, member properties) cannot carry a
+        dimension check, but it can still point at a ledger fact so the
+        provenance of a structural result stays complete.
+        """
+        if isinstance(value, dict):
+            if set(value) == {"fact"}:
+                fid = value["fact"]
+                fact = self.ledger.get(fid) if isinstance(fid, str) else None
+                if fact is None:
+                    raise SpecError(f"unknown fact id {fid}")
+                if fid not in cited:
+                    cited.append(fid)
+                return fact.value
+            return {k: self._cite(v, cited) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._cite(v, cited) for v in value]
+        return value
+
     def resolve(self, kernel, inputs):
         """Turn declared kernel arguments into values, refusing bare quantities.
 
@@ -110,7 +131,8 @@ class Workspace:
         """
         if not isinstance(inputs, dict):
             raise SpecError("inputs must be a JSON object")
-        params = kernels.contract(kernel)["params"]
+        declared = kernels.contract(kernel)
+        params, required = declared["params"], declared["required"]
         extra = sorted(k for k in inputs if k not in params)
         if extra:
             raise SpecError(
@@ -119,10 +141,12 @@ class Workspace:
         kwargs, cited = {}, []
         for name, dim in params.items():
             if name not in inputs:
-                raise SpecError(f"{kernel}: missing argument {name}")
+                if name in required:
+                    raise SpecError(f"{kernel}: missing argument {name}")
+                continue  # optional: the kernel default applies
             raw = inputs[name]
             if dim is None:
-                kwargs[name] = raw
+                kwargs[name] = self._cite(raw, cited)
                 continue
             fid = raw.get("fact") if isinstance(raw, dict) else raw
             if not isinstance(fid, str) or not fid:
